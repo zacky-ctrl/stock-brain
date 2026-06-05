@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import type { LucideIcon } from 'lucide-react'
+import { BrandCredit } from './BrandCredit'
 import {
   ShoppingCart,
   Scissors,
@@ -308,6 +309,8 @@ export function SidebarNav({ role }: Props) {
             )}
           </div>
 
+          {isExpanded && <BrandCredit className="brand-credit-sidebar" />}
+
           {/* Collapse toggle */}
           <button
             type="button"
@@ -472,6 +475,7 @@ export function SidebarNav({ role }: Props) {
                 })}
               </div>
             ))}
+            <BrandCredit className="brand-credit-drawer" />
           </div>
         </>
       )}

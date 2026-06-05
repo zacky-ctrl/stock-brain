@@ -925,6 +925,25 @@ a {
   padding-bottom: 0;
 }
 
+.brand-credit-sidebar {
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 0.25rem 0.4rem;
+  padding: 0.55rem 1rem 0.45rem;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.68rem;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.brand-credit-drawer {
+  justify-content: flex-start;
+  padding: 0.85rem 0 0;
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--border-subtle);
+  text-align: left;
+}
+
 /* ── Card hover ──────────────────────────────────────────────── */
 
 .card-hover {
