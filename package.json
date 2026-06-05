@@ -1,0 +1,21 @@
+{
+  "name": "stock-brain",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @stock-brain/web dev",
+    "build": "pnpm --filter @stock-brain/web build",
+    "type-check": "pnpm --filter '*' type-check",
+    "lint": "pnpm --filter '*' lint",
+    "test:planning": "node_modules/.bin/tsx --env-file .env.local scripts/test-planning-snapshot.ts"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.49.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

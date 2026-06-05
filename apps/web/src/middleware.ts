@@ -1,0 +1,86 @@
+import { createServerClient } from '@supabase/ssr'
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+
+export async function middleware(request: NextRequest) {
+  let supabaseResponse = NextResponse.next({ request })
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return request.cookies.getAll() },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value))
+          supabaseResponse = NextResponse.next({ request })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options))
+        },
+      },
+    }
+  )
+
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const pathname = request.nextUrl.pathname
+
+  const publicRoutes = ['/login', '/auth/callback', '/auth/waiting']
+  if (publicRoutes.some(r => pathname.startsWith(r))) {
+    return supabaseResponse
+  }
+
+  if (!user) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
+  // Role check via service role to bypass RLS.
+  // 2-second timeout: if the role table is unreachable, fail open so a DB
+  // hiccup doesn't lock out all legitimate users.
+  let roles: { role: string }[] = []
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 2000)
+    try {
+      const roleRes = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/user_roles?email=eq.${encodeURIComponent(user.email ?? '')}&is_active=eq.true&select=role`,
+        {
+          headers: {
+            apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+            Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+          },
+          signal: controller.signal,
+        }
+      )
+      roles = await roleRes.json() as { role: string }[]
+    } finally {
+      clearTimeout(timeoutId)
+    }
+  } catch {
+    // Timeout or network error — fail open, session is valid
+    return supabaseResponse
+  }
+
+  if (!roles || roles.length === 0) {
+    if (!pathname.startsWith('/auth/waiting')) {
+      return NextResponse.redirect(new URL('/auth/waiting', request.url))
+    }
+    return supabaseResponse
+  }
+
+  const role = roles[0]?.role
+  const adminOnlyRoutes = ['/admin', '/masters']
+
+  if (adminOnlyRoutes.some(r => pathname.startsWith(r)) && role !== 'admin') {
+    return NextResponse.redirect(new URL('/', request.url))
+  }
+
+  return supabaseResponse
+}
+
+export const config = {
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
+}

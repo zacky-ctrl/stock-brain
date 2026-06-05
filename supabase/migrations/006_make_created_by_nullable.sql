@@ -1,0 +1,12 @@
+-- ============================================================
+-- Stock Brain — Migration 006: SUPERSEDED — DO NOT APPLY
+-- ============================================================
+-- This migration was written to make created_by nullable as a
+-- pre-auth workaround but was never applied to the database.
+--
+-- It has been superseded by migration 007, which takes the
+-- preferred approach: drop the FK constraint while keeping NOT NULL,
+-- and supply a configurable DEV_ACTOR_ID from the environment.
+--
+-- Apply migration 007 instead. This file is kept for history only.
+-- ============================================================
