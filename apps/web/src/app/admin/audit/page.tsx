@@ -29,14 +29,31 @@ const CATEGORY_BADGE: Record<Category, BadgeVariant> = {
   system:   'neutral',
 }
 
+const AUDIT_TIME_ZONE = 'Asia/Kolkata'
+const AUDIT_TS_FORMAT = new Intl.DateTimeFormat('en-GB', {
+  timeZone: AUDIT_TIME_ZONE,
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+})
+const AUDIT_DATE_FORMAT = new Intl.DateTimeFormat('en-GB', {
+  timeZone: AUDIT_TIME_ZONE,
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+})
+
 function fmtTs(ts: string): string {
-  const d = new Date(ts)
-  const dd   = String(d.getDate()).padStart(2, '0')
-  const mm   = String(d.getMonth() + 1).padStart(2, '0')
-  const yyyy = d.getFullYear()
-  const hh   = String(d.getHours()).padStart(2, '0')
-  const min  = String(d.getMinutes()).padStart(2, '0')
-  return `${dd}/${mm}/${yyyy} ${hh}:${min}`
+  return AUDIT_TS_FORMAT.format(new Date(ts)).replace(',', '')
+}
+
+function auditDateKey(ts: string): string {
+  const parts = AUDIT_DATE_FORMAT.formatToParts(new Date(ts))
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? ''
+  return `${part('year')}-${part('month')}-${part('day')}`
 }
 
 function actorDisplay(id: string | null, email: string | null): string {
@@ -68,6 +85,7 @@ export default async function AuditTrailPage({
     cuttingSessionsRes,
     velvetReceiptsRes,
     usersRes,
+    authUsersRes,
   ] = await Promise.all([
     supabase
       .from('stock_corrections')
@@ -123,12 +141,19 @@ export default async function AuditTrailPage({
       .from('users')
       .select('id, email')
       .order('email'),
+
+    supabase.auth.admin.listUsers({ page: 1, perPage: 1000 }),
   ])
 
   const userMap = new Map<string, string>()
+  for (const authUser of (authUsersRes.data.users ?? [])) {
+    if (authUser.id && authUser.email) {
+      userMap.set(authUser.id, authUser.email.toLowerCase())
+    }
+  }
   for (const user of (usersRes.data ?? [])) {
     if (user.id && user.email) {
-      userMap.set(user.id as string, user.email as string)
+      userMap.set(user.id as string, (user.email as string).toLowerCase())
     }
   }
 
@@ -302,12 +327,10 @@ export default async function AuditTrailPage({
   let filtered = events
 
   if (dateFrom) {
-    const from = new Date(dateFrom + 'T00:00:00')
-    filtered = filtered.filter((e) => new Date(e.timestamp) >= from)
+    filtered = filtered.filter((e) => auditDateKey(e.timestamp) >= dateFrom)
   }
   if (dateTo) {
-    const to = new Date(dateTo + 'T23:59:59')
-    filtered = filtered.filter((e) => new Date(e.timestamp) <= to)
+    filtered = filtered.filter((e) => auditDateKey(e.timestamp) <= dateTo)
   }
   if (eventType && eventType !== 'all') {
     filtered = filtered.filter((e) => e.category === eventType)
@@ -318,6 +341,7 @@ export default async function AuditTrailPage({
 
   const userFilterOptions = Array.from(
     new Set([
+      ...(authUsersRes.data.users ?? []).map((user) => user.email?.toLowerCase() ?? null),
       ...(usersRes.data ?? []).map((user) => user.email as string | null),
       ...events.map((event) => event.actor_email),
     ].filter((email): email is string => !!email)),
