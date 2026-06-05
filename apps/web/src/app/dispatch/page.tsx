@@ -33,6 +33,15 @@ type OpenOrderRow = {
   order_lines: { id: string; ordered_qty: string | number; closed_qty: string | number }[]
 }
 
+type OpenOrderWithQty = OpenOrderRow & {
+  open_qty: number
+}
+
+function getCustomerName(customer: OpenOrderRow['customer']): string {
+  const resolved = Array.isArray(customer) ? customer[0] : customer
+  return resolved?.name ?? '—'
+}
+
 export default async function DispatchPage() {
   const supabase = createServerSupabaseClient()
 
@@ -108,7 +117,7 @@ export default async function DispatchPage() {
           <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: '0.6rem' }}>
             Ready to Dispatch
           </div>
-          <div className="table-card" style={{ overflowX: 'auto' }}>
+          <div className="table-card desktop-table-card" style={{ overflowX: 'auto' }}>
             <table className="stock-table">
               <thead>
                 <tr>
@@ -162,6 +171,46 @@ export default async function DispatchPage() {
               </tbody>
             </table>
           </div>
+          <div className="mobile-card-list">
+            {openOrdersWithQty.map((o: OpenOrderWithQty) => {
+              const daysOld = daysSince(o.order_date)
+
+              return (
+                <article key={o.id} className="mobile-data-card">
+                  <div className="mobile-card-top">
+                    <div style={{ minWidth: 0 }}>
+                      <div className="mobile-card-title">{getCustomerName(o.customer)}</div>
+                      <div className="mobile-card-meta">
+                        {o.order_date} {o.reference ? ` / ${o.reference}` : ''}
+                      </div>
+                    </div>
+                    <div style={{ color: daysOld > 14 ? 'var(--danger)' : 'var(--text-secondary)', fontSize: 'var(--text-xs)', fontWeight: 700 }}>
+                      {daysOld}d
+                    </div>
+                  </div>
+                  <div className="mobile-card-row" style={{ marginTop: '0.65rem' }}>
+                    <span className="mobile-card-label">Open Qty</span>
+                    <strong className="mobile-card-value">{fmt(o.open_qty)}</strong>
+                  </div>
+                  <div className="mobile-card-actions">
+                    <Link
+                      href={`/dispatch/new?order_id=${o.id}`}
+                      style={{
+                        padding: '0.35rem 0.7rem',
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 700,
+                        background: 'var(--accent)',
+                        color: 'white',
+                        borderRadius: 'var(--radius-sm)',
+                      }}
+                    >
+                      Dispatch
+                    </Link>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
         </div>
       )}
 
@@ -182,7 +231,7 @@ export default async function DispatchPage() {
           <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: '0.6rem' }}>
             Dispatch History
           </div>
-          <div className="table-card">
+          <div className="table-card desktop-table-card">
             <table className="stock-table">
               <thead>
                 <tr>
@@ -223,6 +272,50 @@ export default async function DispatchPage() {
                 })}
               </tbody>
             </table>
+          </div>
+          <div className="mobile-card-list">
+            {events.map((ev) => {
+              const customer = Array.isArray(ev.customers) ? ev.customers[0] : ev.customers
+              const lines = ev.dispatch_lines ?? []
+              const totalQty = lines.reduce((s, l) => s + Number(l.quantity_dispatched), 0)
+
+              return (
+                <article key={ev.id} className="mobile-data-card">
+                  <div className="mobile-card-top">
+                    <div style={{ minWidth: 0 }}>
+                      <Link href={`/dispatch/${ev.id}`} className="mobile-card-title" style={{ color: 'var(--info)' }}>
+                        {ev.id.slice(0, 8)}
+                      </Link>
+                      <div className="mobile-card-meta">
+                        {ev.dispatch_date} / {(customer as { name: string } | null)?.name ?? '—'}
+                      </div>
+                    </div>
+                    <Badge variant={statusBadgeVariant(ev.status)} label={ev.status} size="sm" />
+                  </div>
+                  <div className="mobile-card-grid">
+                    <div><span className="mobile-card-label">Reference</span><strong className="mobile-card-value">{ev.reference ?? '—'}</strong></div>
+                    <div><span className="mobile-card-label">Lines</span><strong className="mobile-card-value">{lines.length}</strong></div>
+                    <div><span className="mobile-card-label">Total Qty</span><strong className="mobile-card-value">{fmt(totalQty)}</strong></div>
+                  </div>
+                  <div className="mobile-card-actions">
+                    <Link
+                      href={`/dispatch/${ev.id}`}
+                      style={{
+                        padding: '0.35rem 0.7rem',
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 700,
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border)',
+                        color: 'var(--text-secondary)',
+                        borderRadius: 'var(--radius-sm)',
+                      }}
+                    >
+                      View
+                    </Link>
+                  </div>
+                </article>
+              )
+            })}
           </div>
         </>
       )}

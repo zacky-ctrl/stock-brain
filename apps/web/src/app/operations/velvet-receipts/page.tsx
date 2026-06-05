@@ -91,7 +91,8 @@ export default async function VelvetReceiptsPage() {
           </Link>
         </p>
       ) : (
-        <div className="table-card">
+        <>
+        <div className="table-card desktop-table-card">
         <table className="stock-table">
           <thead>
             <tr>
@@ -131,6 +132,38 @@ export default async function VelvetReceiptsPage() {
           </tbody>
         </table>
         </div>
+        <div className="mobile-card-list">
+          {receipts.map((r) => {
+            const metres = r.metres_received != null
+              ? Number(r.metres_received)
+              : Number(r.bundles_received ?? 0) * METRES_PER_BUNDLE
+            const bundlesRef = r.bundles_received != null ? Number(r.bundles_received) : null
+            const colour = r.bindi_colour_id
+              ? (r.bindi_colours?.name ?? r.bindi_colours?.code ?? '-')
+              : '-'
+
+            return (
+              <article key={r.id} className="mobile-data-card">
+                <div className="mobile-card-top">
+                  <div style={{ minWidth: 0 }}>
+                    <div className="mobile-card-title">{r.receipt_date}</div>
+                    <div className="mobile-card-meta">{r.supplier ?? 'No supplier'} {r.reference ? `/ ${r.reference}` : ''}</div>
+                  </div>
+                  <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: r.bindi_colour_id ? 'var(--accent-bright)' : 'var(--text-muted)' }}>
+                    {colour}
+                  </div>
+                </div>
+                <div className="mobile-card-grid">
+                  <div><span className="mobile-card-label">Metres</span><strong className="mobile-card-value">{fmt1(metres)}</strong></div>
+                  <div><span className="mobile-card-label">Bundles</span><strong className="mobile-card-value">{bundlesRef != null ? fmt3(bundlesRef) : '-'}</strong></div>
+                  <div><span className="mobile-card-label">Reference</span><strong className="mobile-card-value">{r.reference ?? '-'}</strong></div>
+                  <div><span className="mobile-card-label">Notes</span><strong className="mobile-card-value">{r.notes ?? '-'}</strong></div>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+        </>
       )}
     </main>
   )

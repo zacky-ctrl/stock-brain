@@ -12,7 +12,7 @@ type PageHeaderProps = {
 
 export function PageHeader({ title, subtitle, actions, backHref, badge }: PageHeaderProps) {
   return (
-    <div style={{ marginBottom: '1.5rem' }}>
+    <div className="page-header" style={{ marginBottom: '1.5rem' }}>
       {backHref && (
         <Link
           href={backHref}
@@ -29,7 +29,7 @@ export function PageHeader({ title, subtitle, actions, backHref, badge }: PageHe
           Back
         </Link>
       )}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+      <div className="page-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
             <h1
@@ -58,7 +58,7 @@ export function PageHeader({ title, subtitle, actions, backHref, badge }: PageHe
           )}
         </div>
         {actions && (
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
+          <div className="page-header-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
             {actions}
           </div>
         )}

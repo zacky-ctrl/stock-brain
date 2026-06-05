@@ -99,59 +99,65 @@ const ACTION_COLOR: Partial<Record<PlanningLineStatus, CSSProperties>> = {
 
 // ── sub-components ─────────────────────────────────────────────
 
-function PriorityForm({ orderId, onDone }: { orderId: string; onDone: () => void }) {
+function PriorityFormFields({ orderId, onDone }: { orderId: string; onDone: () => void }) {
   const [state, formAction, isPending] = useActionState<ActionState, FormData>(
     setOrderPriorityAction,
     null,
   )
 
   return (
+    <form action={formAction} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+      <input type="hidden" name="order_id" value={orderId} />
+      {state && 'error' in state && (
+        <span style={{ ...msgError, marginBottom: 0, fontSize: 'var(--text-xs)' }}>✗ {state.error}</span>
+      )}
+      {state && 'success' in state && (
+        <span style={{ ...msgOk, marginBottom: 0, fontSize: 'var(--text-xs)' }}>✓ {state.success}</span>
+      )}
+      <div style={{ ...fieldWrap, flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
+        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Priority (1-highest):</span>
+        <input
+          name="priority_value"
+          type="number"
+          min="1"
+          step="1"
+          placeholder="1"
+          required
+          style={{ ...inputStyle, width: '70px', padding: '0.25rem 0.4rem', fontSize: 'var(--text-xs)' }}
+        />
+      </div>
+      <div style={{ ...fieldWrap, flexDirection: 'row', alignItems: 'center', gap: '0.4rem', flex: 1, minWidth: '200px' }}>
+        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Reason:</span>
+        <input
+          name="reason"
+          placeholder="e.g. Urgent customer request"
+          required
+          style={{ ...inputStyle, padding: '0.25rem 0.4rem', fontSize: 'var(--text-xs)' }}
+        />
+      </div>
+      <button
+        type="submit"
+        disabled={isPending}
+        style={{ ...btnPrimary, padding: '0.25rem 0.65rem', fontSize: 'var(--text-xs)', marginTop: 0 }}
+      >
+        {isPending ? 'Saving...' : 'Apply to all lines'}
+      </button>
+      <button
+        type="button"
+        onClick={onDone}
+        style={{ padding: '0.25rem 0.5rem', fontSize: 'var(--text-xs)', cursor: 'pointer', background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)' }}
+      >
+        Cancel
+      </button>
+    </form>
+  )
+}
+
+function PriorityForm({ orderId, onDone }: { orderId: string; onDone: () => void }) {
+  return (
     <tr>
       <td colSpan={11} style={{ padding: '0.75rem 1rem', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)' }}>
-        <form action={formAction} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <input type="hidden" name="order_id" value={orderId} />
-          {state && 'error' in state && (
-            <span style={{ ...msgError, marginBottom: 0, fontSize: 'var(--text-xs)' }}>✗ {state.error}</span>
-          )}
-          {state && 'success' in state && (
-            <span style={{ ...msgOk, marginBottom: 0, fontSize: 'var(--text-xs)' }}>✓ {state.success}</span>
-          )}
-          <div style={{ ...fieldWrap, flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Priority (1–highest):</span>
-            <input
-              name="priority_value"
-              type="number"
-              min="1"
-              step="1"
-              placeholder="1"
-              required
-              style={{ ...inputStyle, width: '70px', padding: '0.25rem 0.4rem', fontSize: 'var(--text-xs)' }}
-            />
-          </div>
-          <div style={{ ...fieldWrap, flexDirection: 'row', alignItems: 'center', gap: '0.4rem', flex: 1, minWidth: '200px' }}>
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Reason:</span>
-            <input
-              name="reason"
-              placeholder="e.g. Urgent customer request"
-              required
-              style={{ ...inputStyle, padding: '0.25rem 0.4rem', fontSize: 'var(--text-xs)' }}
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={isPending}
-            style={{ ...btnPrimary, padding: '0.25rem 0.65rem', fontSize: 'var(--text-xs)', marginTop: 0 }}
-          >
-            {isPending ? 'Saving…' : 'Apply to all lines'}
-          </button>
-          <button
-            type="button"
-            onClick={onDone}
-            style={{ padding: '0.25rem 0.5rem', fontSize: 'var(--text-xs)', cursor: 'pointer', background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)' }}
-          >
-            Cancel
-          </button>
-        </form>
+        <PriorityFormFields orderId={orderId} onDone={onDone} />
       </td>
     </tr>
   )
@@ -174,37 +180,43 @@ function ReserveConfirm({
   )
 
   return (
+    <form action={formAction} style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <input type="hidden" name="lines_json" value={linesJson} />
+      {state && 'error' in state && (
+        <span style={{ ...msgError, marginBottom: 0, fontSize: 'var(--text-xs)' }}>✗ {state.error}</span>
+      )}
+      {state && 'success' in state && (
+        <span style={{ ...msgOk, marginBottom: 0, fontSize: 'var(--text-xs)' }}>✓ {state.success}</span>
+      )}
+      <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+        Reserve all available stock for <strong>{order.customer_name}</strong>?{' '}
+        <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {fmt(totalQty)} gross across {order.reservable_lines.length} line(s).
+        </span>
+      </span>
+      <button
+        type="submit"
+        disabled={isPending}
+        style={{ ...btnPrimary, background: 'var(--success)', padding: '0.25rem 0.65rem', fontSize: 'var(--text-xs)', marginTop: 0 }}
+      >
+        {isPending ? 'Reserving...' : 'Confirm Reserve'}
+      </button>
+      <button
+        type="button"
+        onClick={onDone}
+        style={{ padding: '0.25rem 0.5rem', fontSize: 'var(--text-xs)', cursor: 'pointer', background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)' }}
+      >
+        Cancel
+      </button>
+    </form>
+  )
+}
+
+function ReserveConfirmRow({ order, onDone }: { order: OrderClientRow; onDone: () => void }) {
+  return (
     <tr>
       <td colSpan={11} style={{ padding: '0.75rem 1rem', background: 'rgba(16,185,129,0.05)', borderBottom: '1px solid var(--border)' }}>
-        <form action={formAction} style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <input type="hidden" name="lines_json" value={linesJson} />
-          {state && 'error' in state && (
-            <span style={{ ...msgError, marginBottom: 0, fontSize: 'var(--text-xs)' }}>✗ {state.error}</span>
-          )}
-          {state && 'success' in state && (
-            <span style={{ ...msgOk, marginBottom: 0, fontSize: 'var(--text-xs)' }}>✓ {state.success}</span>
-          )}
-          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-            Reserve all available stock for <strong>{order.customer_name}</strong>?{' '}
-            <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-              {fmt(totalQty)} gross across {order.reservable_lines.length} line(s).
-            </span>
-          </span>
-          <button
-            type="submit"
-            disabled={isPending}
-            style={{ ...btnPrimary, background: 'var(--success)', padding: '0.25rem 0.65rem', fontSize: 'var(--text-xs)', marginTop: 0 }}
-          >
-            {isPending ? 'Reserving…' : 'Confirm Reserve'}
-          </button>
-          <button
-            type="button"
-            onClick={onDone}
-            style={{ padding: '0.25rem 0.5rem', fontSize: 'var(--text-xs)', cursor: 'pointer', background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)' }}
-          >
-            Cancel
-          </button>
-        </form>
+        <ReserveConfirm order={order} onDone={onDone} />
       </td>
     </tr>
   )
@@ -334,6 +346,205 @@ function ShortagePanel({
   )
 }
 
+function ShortageChips({
+  order,
+  expanded,
+  onToggle,
+}: {
+  order: OrderClientRow
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const { type1_gross, type2_gross, type3_gross, ready_gross } = order.planning_sum
+  const hasLabour = type1_gross > 0
+  const hasCut = type2_gross + type3_gross > 0
+  const hasAnyShortage = hasLabour || hasCut
+  const isCovered = !hasAnyShortage && (ready_gross > 0 || order.open_qty === 0)
+
+  if (order.open_qty === 0) {
+    return <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>-</span>
+  }
+
+  if (!order.planning_rows.length && !isCovered) {
+    return <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>-</span>
+  }
+
+  return (
+    <button
+      onClick={onToggle}
+      style={{
+        cursor: order.planning_rows.length ? 'pointer' : 'default',
+        background: 'none',
+        border: 'none',
+        padding: 0,
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '0.25rem',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+      }}
+    >
+      {hasLabour && (
+        <span style={{ display: 'inline-block', padding: '0.1rem 0.4rem', fontSize: 'var(--text-xs)', fontWeight: 700, background: 'rgba(245,158,11,0.12)', color: 'var(--warning)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(245,158,11,0.25)', whiteSpace: 'nowrap' }}>
+          {fmt(type1_gross)} labour
+        </span>
+      )}
+      {hasCut && (
+        <span style={{ display: 'inline-block', padding: '0.1rem 0.4rem', fontSize: 'var(--text-xs)', fontWeight: 700, background: 'var(--danger-subtle)', color: 'var(--danger)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239,68,68,0.2)', whiteSpace: 'nowrap' }}>
+          {fmt(type2_gross + type3_gross)} cut
+        </span>
+      )}
+      {isCovered && !hasAnyShortage && (
+        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--success)' }}>Covered</span>
+      )}
+      {order.planning_rows.length > 0 && (
+        <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{expanded ? 'Hide' : 'Details'}</span>
+      )}
+    </button>
+  )
+}
+
+function MobileShortageDetails({
+  order,
+  shapeMap,
+  bindiMap,
+  sizeMap,
+  dabbiMap,
+}: {
+  order: OrderClientRow
+  shapeMap: Record<string, string>
+  bindiMap: Record<string, string>
+  sizeMap: Record<string, string>
+  dabbiMap: Record<string, string>
+}) {
+  return (
+    <div style={{ marginTop: '0.75rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '0.75rem', display: 'grid', gap: '0.5rem' }}>
+      {order.planning_rows.map((row) => (
+        <div key={row.order_line_id} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '0.65rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontWeight: 700 }}>
+                {shapeMap[row.shape_design_id] ?? '-'} / {bindiMap[row.bindi_colour_id] ?? '-'} / {sizeMap[row.size_id] ?? '-'}
+              </div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--accent-bright)', fontWeight: 700 }}>
+                Dabbi: {dabbiMap[row.dabbi_colour_id] ?? '-'}
+              </div>
+            </div>
+            <Badge variant={statusBadgeVariant(row.planning_status)} label={row.planning_status.replace(/_/g, ' ')} size="sm" />
+          </div>
+          <div className="mobile-card-grid">
+            <div><span className="mobile-card-label">Open</span><strong className="mobile-card-value">{fmt(row.open_qty)}</strong></div>
+            <div><span className="mobile-card-label">Ready</span><strong className="mobile-card-value">{row.ready_allocated_qty > 0 ? fmt(row.ready_allocated_qty) : '-'}</strong></div>
+            <div><span className="mobile-card-label">WIP</span><strong className="mobile-card-value">{row.wip_allocated_qty > 0 ? fmt(row.wip_allocated_qty) : '-'}</strong></div>
+            <div><span className="mobile-card-label">Cut Avail</span><strong className="mobile-card-value">{row.cuttings_available_qty > 0 ? fmt(row.cuttings_available_qty) : '-'}</strong></div>
+            <div><span className="mobile-card-label">Issue</span><strong className="mobile-card-value" style={{ color: row.cuttings_allocated_qty > 0 ? 'var(--warning)' : undefined }}>{row.cuttings_allocated_qty > 0 ? fmt(row.cuttings_allocated_qty) : '-'}</strong></div>
+            <div><span className="mobile-card-label">Short</span><strong className="mobile-card-value" style={{ color: row.shortage_qty > 0 ? 'var(--danger)' : undefined }}>{row.shortage_qty > 0 ? fmt(row.shortage_qty) : '-'}</strong></div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function MobileOrderCard({
+  order,
+  expanded,
+  priorityOpen,
+  reserveOpen,
+  onToggleShortage,
+  onTogglePriority,
+  onToggleReserve,
+  shapeMap,
+  bindiMap,
+  sizeMap,
+  dabbiMap,
+}: {
+  order: OrderClientRow
+  expanded: boolean
+  priorityOpen: boolean
+  reserveOpen: boolean
+  onToggleShortage: () => void
+  onTogglePriority: () => void
+  onToggleReserve: () => void
+  shapeMap: Record<string, string>
+  bindiMap: Record<string, string>
+  sizeMap: Record<string, string>
+  dabbiMap: Record<string, string>
+}) {
+  const canAct = order.status === 'open' || order.status === 'partially_dispatched'
+
+  return (
+    <article className="mobile-data-card">
+      <div className="mobile-card-top">
+        <div style={{ minWidth: 0 }}>
+          <Link href={`/orders/${order.id}`} className="mobile-card-title">
+            {order.customer_name}
+          </Link>
+          <div className="mobile-card-meta">
+            {order.order_date} {order.reference ? ` / ${order.reference}` : ''}
+          </div>
+        </div>
+        <Badge variant={statusBadgeVariant(order.status)} label={order.status.replace(/_/g, ' ')} size="sm" />
+      </div>
+
+      <div className="mobile-card-grid">
+        <div><span className="mobile-card-label">Lines</span><strong className="mobile-card-value">{order.line_count}</strong></div>
+        <div><span className="mobile-card-label">Ordered</span><strong className="mobile-card-value">{fmt(order.total_ordered)}</strong></div>
+        <div><span className="mobile-card-label">Dispatched</span><strong className="mobile-card-value">{fmt(order.total_dispatched)}</strong></div>
+        <div><span className="mobile-card-label">Open</span><strong className="mobile-card-value" style={{ color: order.is_stale ? 'var(--danger)' : undefined }}>{fmt(order.open_qty)}</strong></div>
+      </div>
+
+      <div className="mobile-card-row" style={{ marginTop: '0.65rem' }}>
+        <span className="mobile-card-label">Shortage</span>
+        <ShortageChips order={order} expanded={expanded} onToggle={onToggleShortage} />
+      </div>
+
+      {expanded && (
+        <MobileShortageDetails
+          order={order}
+          shapeMap={shapeMap}
+          bindiMap={bindiMap}
+          sizeMap={sizeMap}
+          dabbiMap={dabbiMap}
+        />
+      )}
+
+      {priorityOpen && (
+        <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
+          <PriorityFormFields orderId={order.id} onDone={onTogglePriority} />
+        </div>
+      )}
+
+      {reserveOpen && (
+        <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(16,185,129,0.05)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
+          <ReserveConfirm order={order} onDone={onToggleReserve} />
+        </div>
+      )}
+
+      <div className="mobile-card-actions">
+        <Link href={`/orders/${order.id}`} style={{ padding: '0.35rem 0.65rem', fontSize: 'var(--text-xs)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)' }}>
+          View
+        </Link>
+        {canAct && (
+          <Link href={`/dispatch/new?order_id=${order.id}`} style={{ padding: '0.35rem 0.65rem', fontSize: 'var(--text-xs)', background: 'var(--accent-subtle)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 'var(--radius-sm)', color: 'var(--accent)', fontWeight: 600 }}>
+            Dispatch
+          </Link>
+        )}
+        {canAct && (
+          <button onClick={onTogglePriority} style={{ cursor: 'pointer', border: '1px solid var(--info)', borderRadius: 'var(--radius-sm)', padding: '0.35rem 0.65rem', fontSize: 'var(--text-xs)', background: priorityOpen ? 'var(--info)' : 'transparent', color: priorityOpen ? 'white' : 'var(--info)' }}>
+            Priority
+          </button>
+        )}
+        {canAct && order.reservable_lines.length > 0 && (
+          <button onClick={onToggleReserve} style={{ cursor: 'pointer', border: '1px solid var(--success)', borderRadius: 'var(--radius-sm)', padding: '0.35rem 0.65rem', fontSize: 'var(--text-xs)', background: 'transparent', color: 'var(--success)' }}>
+            Reserve
+          </button>
+        )}
+      </div>
+    </article>
+  )
+}
+
 // ── main component ─────────────────────────────────────────────
 
 export function OrdersClient({
@@ -399,18 +610,6 @@ export function OrdersClient({
     })
   }
 
-  const filterBar: CSSProperties = {
-    display: 'flex',
-    gap: '0.6rem',
-    alignItems: 'flex-end',
-    flexWrap: 'wrap',
-    padding: '0.75rem 1rem',
-    background: 'var(--bg-elevated)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-sm)',
-    marginBottom: '1.25rem',
-  }
-
   const filterLabel: CSSProperties = {
     fontSize: 'var(--text-xs)',
     color: 'var(--text-secondary)',
@@ -444,8 +643,8 @@ export function OrdersClient({
   return (
     <>
       {/* Filter bar */}
-      <div style={filterBar}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+      <div className="responsive-filter-bar">
+        <div className="responsive-filter-field">
           <span style={filterLabel}>Customer</span>
           <select value={customer} onChange={(e) => setCustomer(e.target.value)} style={filterSelect}>
             <option value="">All customers</option>
@@ -455,7 +654,7 @@ export function OrdersClient({
           </select>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+        <div className="responsive-filter-field">
           <span style={filterLabel}>Status</span>
           <select value={status} onChange={(e) => setStatus(e.target.value)} style={filterSelect}>
             {STATUS_OPTIONS.map((opt) => (
@@ -464,17 +663,17 @@ export function OrdersClient({
           </select>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+        <div className="responsive-filter-field">
           <span style={filterLabel}>Date from</span>
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={filterDate} />
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+        <div className="responsive-filter-field">
           <span style={filterLabel}>Date to</span>
           <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={filterDate} />
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+        <div className="responsive-filter-field">
           <span style={filterLabel}>Shortage</span>
           <select value={shortage} onChange={(e) => setShortage(e.target.value)} style={filterSelect}>
             <option value="">All</option>
@@ -500,7 +699,7 @@ export function OrdersClient({
       </div>
 
       {/* Table */}
-      <div className="table-card" style={{ overflowX: 'auto' }}>
+      <div className="table-card desktop-table-card" style={{ overflowX: 'auto' }}>
         <table className="stock-table" style={{ minWidth: '1100px' }}>
           <thead>
             <tr>
@@ -677,7 +876,7 @@ export function OrdersClient({
                     />
                   )}
                   {isReserveOpen && (
-                    <ReserveConfirm
+                    <ReserveConfirmRow
                       order={order}
                       onDone={() => setOpenReserve(null)}
                     />
@@ -690,6 +889,37 @@ export function OrdersClient({
 
         {filtered.length === 0 && (
           <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
+            No orders match the current filters.
+          </div>
+        )}
+      </div>
+
+      <div className="mobile-card-list">
+        {filtered.map((order) => {
+          const isShortageExpanded = expandedShortage.has(order.id)
+          const isPriorityOpen = openPriority === order.id
+          const isReserveOpen = openReserve === order.id
+
+          return (
+            <MobileOrderCard
+              key={order.id}
+              order={order}
+              expanded={isShortageExpanded}
+              priorityOpen={isPriorityOpen}
+              reserveOpen={isReserveOpen}
+              onToggleShortage={() => toggleShortage(order.id)}
+              onTogglePriority={() => setOpenPriority(isPriorityOpen ? null : order.id)}
+              onToggleReserve={() => setOpenReserve(isReserveOpen ? null : order.id)}
+              shapeMap={shapeMap}
+              bindiMap={bindiMap}
+              sizeMap={sizeMap}
+              dabbiMap={dabbiMap}
+            />
+          )
+        })}
+
+        {filtered.length === 0 && (
+          <div className="mobile-data-card" style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
             No orders match the current filters.
           </div>
         )}

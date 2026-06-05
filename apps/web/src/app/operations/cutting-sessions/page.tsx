@@ -84,7 +84,8 @@ export default async function CuttingSessionsPage() {
       )}
 
       {sessions.length > 0 && (
-        <div className="table-card">
+        <>
+        <div className="table-card desktop-table-card">
         <table className="stock-table">
           <thead>
             <tr>
@@ -136,6 +137,47 @@ export default async function CuttingSessionsPage() {
           </tbody>
         </table>
         </div>
+        <div className="mobile-card-list">
+          {sessions.map((s, idx) => {
+            const machine = Array.isArray(s.machines) ? s.machines[0] : s.machines
+            const lines = s.cutting_session_lines ?? []
+            const totalCut = lines.reduce((sum, l) => sum + Number(l.quantity_gross), 0)
+            const sessionNum = sessions.length - idx
+            const sessionDate = s.session_date
+              ? new Date(s.session_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+              : ''
+            const machineCode = machine?.code
+            const sessionLabel = machineCode
+              ? `${sessionDate} / ${machineCode}`
+              : `Session #${sessionNum}`
+
+            return (
+              <article key={s.id} className="mobile-data-card" style={{ opacity: s.status === 'voided' ? 0.5 : 1 }}>
+                <div className="mobile-card-top">
+                  <div style={{ minWidth: 0 }}>
+                    <Link href={`/operations/cutting-sessions/${s.id}`} className="mobile-card-title" style={{ color: 'var(--info)' }}>
+                      {sessionLabel}
+                    </Link>
+                    <div className="mobile-card-meta">{s.session_date}</div>
+                  </div>
+                  <Badge variant={statusBadgeVariant(s.status)} label={s.status} size="sm" />
+                </div>
+                <div className="mobile-card-grid">
+                  <div><span className="mobile-card-label">Machine</span><strong className="mobile-card-value">{machine ? `${machine.code} / ${machine.name}` : '-'}</strong></div>
+                  <div><span className="mobile-card-label">Lines</span><strong className="mobile-card-value">{lines.length}</strong></div>
+                  <div><span className="mobile-card-label">Total Cut</span><strong className="mobile-card-value">{fmt(totalCut)}</strong></div>
+                  <div><span className="mobile-card-label">Velvet</span><strong className="mobile-card-value">{fmt(Number(s.velvet_bundles_consumed))}</strong></div>
+                </div>
+                <div className="mobile-card-actions">
+                  <Link href={`/operations/cutting-sessions/${s.id}`} style={{ padding: '0.35rem 0.7rem', fontSize: 'var(--text-xs)', fontWeight: 700, background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: 'var(--radius-sm)' }}>
+                    View
+                  </Link>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+        </>
       )}
     </main>
   )

@@ -66,7 +66,7 @@ export default async function UsersPage() {
         <>
           <SectionHeader title="Pending Approval" count={pendingUsers.length} />
           <Card style={{ marginBottom: '2rem' }}>
-            <div style={{ overflowX: 'auto' }}>
+            <div className="desktop-table-card" style={{ overflowX: 'auto' }}>
               <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '560px' }}>
                 <thead>
                   <tr>
@@ -88,12 +88,27 @@ export default async function UsersPage() {
                 </tbody>
               </table>
             </div>
+            <div className="mobile-card-list">
+              {pendingUsers.map((u) => (
+                <article key={u.id} className="mobile-data-card">
+                  <div className="mobile-card-top">
+                    <div style={{ minWidth: 0 }}>
+                      <div className="mobile-card-title">{u.email}</div>
+                      <div className="mobile-card-meta">Signed up {new Date(u.created_at).toLocaleDateString()}</div>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <AssignUserForm defaultEmail={u.email} compact />
+                  </div>
+                </article>
+              ))}
+            </div>
           </Card>
         </>
       )}
 
       <SectionHeader title="All Users" count={users.length} />
-      <div style={{ overflowX: 'auto' }}>
+      <div className="desktop-table-card" style={{ overflowX: 'auto' }}>
         <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '560px' }}>
           <thead>
             <tr>
@@ -133,6 +148,37 @@ export default async function UsersPage() {
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="mobile-card-list">
+        {users.length === 0 && (
+          <div className="mobile-data-card" style={{ color: 'var(--text-muted)', textAlign: 'center' }}>
+            No users yet. Add one above.
+          </div>
+        )}
+        {users.map((u) => (
+          <article key={u.id} className="mobile-data-card">
+            <div className="mobile-card-top">
+              <div style={{ minWidth: 0 }}>
+                <div className="mobile-card-title">{u.email}</div>
+                <div className="mobile-card-meta">Assigned {new Date(u.assigned_at).toLocaleDateString()}</div>
+              </div>
+              <Badge variant={u.is_active ? 'success' : 'neutral'} size="sm" label={u.is_active ? 'active' : 'revoked'} />
+            </div>
+            <div className="mobile-card-row" style={{ marginTop: '0.65rem' }}>
+              <span className="mobile-card-label">Role</span>
+              <Badge
+                variant={u.role === 'admin' ? 'danger' : u.role === 'manager' ? 'warning' : 'neutral'}
+                size="sm"
+                label={u.role}
+              />
+            </div>
+            {u.is_active && (
+              <div className="mobile-card-actions">
+                <RevokeButton email={u.email} />
+              </div>
+            )}
+          </article>
+        ))}
       </div>
     </main>
   )

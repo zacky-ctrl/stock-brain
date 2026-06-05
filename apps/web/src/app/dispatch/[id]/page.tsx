@@ -199,7 +199,7 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
 
       {/* Lines — challan table */}
       <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.75rem' }}>Dispatch Lines</h3>
-      <div style={{ overflowX: 'auto', marginBottom: '2rem' }}>
+      <div className="desktop-table-card" style={{ overflowX: 'auto', marginBottom: '2rem' }}>
         <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '900px' }}>
           <thead>
             <tr>
@@ -274,6 +274,56 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
             </tr>
           </tfoot>
         </table>
+      </div>
+      <div className="mobile-card-list" style={{ marginBottom: '2rem' }}>
+        {lines.map((l) => {
+          const rsb = resolveRef(l.ready_stock_balance)
+          const ol = resolveRef(l.order_line)
+          const lineType = l.line_type ?? 'ordered'
+          const sentQty = Number(l.quantity_dispatched)
+          const orderedQty = ol ? Number(ol.ordered_qty) : 0
+          const variance = Number(l.qty_variance ?? 0)
+          const isExtra = lineType === 'extra'
+
+          return (
+            <article key={l.id} className="mobile-data-card" style={{ background: isExtra ? 'var(--info-subtle)' : undefined }}>
+              <div className="mobile-card-top">
+                <div style={{ minWidth: 0 }}>
+                  <div className="mobile-card-title">
+                    {rsb?.shape_design?.name ?? '—'} / {rsb?.bindi_colour?.code ?? '—'} / {rsb?.size?.code ?? '—'}
+                  </div>
+                  <div className="mobile-card-meta">
+                    Dabbi {rsb?.dabbi_colour?.name ?? '—'} / {rsb?.brand?.name ?? '—'}
+                  </div>
+                </div>
+                <LineTypeBadge lineType={lineType} />
+              </div>
+
+              <div className="mobile-card-grid">
+                <div><span className="mobile-card-label">Ordered</span><strong className="mobile-card-value">{isExtra ? '—' : fmt(orderedQty)}</strong></div>
+                <div><span className="mobile-card-label">Sent</span><strong className="mobile-card-value">{fmt(sentQty)}</strong></div>
+                <div><span className="mobile-card-label">Variance</span><strong className="mobile-card-value">{isExtra || variance === 0 ? '—' : `${variance > 0 ? '+' : ''}${fmt(variance)}`}</strong></div>
+                <div><span className="mobile-card-label">Order</span><strong className="mobile-card-value">{ol?.order_id ? ol.order_id.slice(0, 8) : '—'}</strong></div>
+              </div>
+
+              {(l.colour_match === false || l.override_reason || ol?.order_id) && (
+                <div className="mobile-card-actions">
+                  {ol?.order_id && (
+                    <Link href={`/orders/${ol.order_id}`} style={{ padding: '0.35rem 0.7rem', fontSize: 'var(--text-xs)', fontWeight: 700, background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: 'var(--radius-sm)' }}>
+                      View Order
+                    </Link>
+                  )}
+                  {l.colour_match === false && (
+                    <span style={{ alignSelf: 'center', color: 'var(--warning)', fontSize: 'var(--text-xs)', fontWeight: 700 }}>CLR mismatch</span>
+                  )}
+                  {l.override_reason && (
+                    <span style={{ alignSelf: 'center', color: 'var(--danger)', fontSize: 'var(--text-xs)', fontWeight: 700 }}>Overridden</span>
+                  )}
+                </div>
+              )}
+            </article>
+          )
+        })}
       </div>
 
       {/* Fulfilment summary footer */}

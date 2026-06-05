@@ -1,21 +1,22 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { fetchPlanningAllocation } from './planning/allocation/fetchers'
-import { StatCard } from '@/components/ui/StatCard'
+import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
-import { Badge, statusBadgeVariant } from '@/components/ui/Badge'
 import {
-  ShoppingCart,
-  Truck,
   AlertTriangle,
-  Clock,
-  Package,
+  ArrowRight,
   CheckCircle,
+  ClipboardList,
+  PackageX,
   Plus,
   Scissors,
+  Truck,
   Users,
 } from 'lucide-react'
 import Link from 'next/link'
+import type { LucideIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
 import type { PlanningAllocationRow } from '@stock-brain/types'
 
 function fmt(n: number): string {
@@ -23,272 +24,540 @@ function fmt(n: number): string {
   return n % 1 === 0 ? String(n) : n.toFixed(1)
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  ready_to_dispatch: 'Ready',
-  give_to_labour: 'Give to Labour',
-  cut_on_machine: 'Cut on Machine',
-  procure_velvet: 'Procure Velvet',
-  covered_by_wip: 'Covered by WIP',
-  ready_to_dispatch_override: '⚠ Ready (Override)',
-  give_to_labour_override: '⚠ Labour (Override)',
-  cut_on_machine_override: '⚠ Cut (Override)',
+type LookupRow = { id: string; code: string; name?: string | null }
+
+function buildLookup(rows: LookupRow[] | null, preferName = false): Map<string, string> {
+  return new Map((rows ?? []).map((row) => [row.id, preferName && row.name ? row.name : row.code]))
+}
+
+type OrderBucket = {
+  orderId: string
+  customerId: string
+  customerName: string
+  openQty: number
+  actionQty: number
+  lineCount: number
+  priorityRank: number
+  promisedDate: string | null
+}
+
+type SkuBucket = {
+  key: string
+  shape: string
+  colour: string
+  size: string
+  qty: number
+  demandQty: number
+  customerCount: number
+  priorityRank: number
+  conversionRateMissing: boolean
+}
+
+type RecentActivity = {
+  label: string
+  href: string
+  meta: string
+}
+
+type DispatchEventRow = {
+  id: string
+  dispatch_date: string
+  customers: { name: string } | { name: string }[] | null
+}
+
+type LabourJobRow = {
+  id: string
+  assigned_date: string
+  labour_units: { name: string } | { name: string }[] | null
+}
+
+type CuttingSessionRow = {
+  id: string
+  session_date: string
+  machines: { code: string; name: string | null } | { code: string; name: string | null }[] | null
+}
+
+function addOrderQty(
+  map: Map<string, OrderBucket>,
+  row: PlanningAllocationRow,
+  qty: number,
+): void {
+  const existing = map.get(row.order_id)
+  if (existing) {
+    existing.openQty += row.open_qty
+    existing.actionQty += qty
+    existing.lineCount += 1
+    existing.priorityRank = Math.min(existing.priorityRank, row.priority_rank)
+    existing.promisedDate = existing.promisedDate ?? row.promised_date
+    return
+  }
+
+  map.set(row.order_id, {
+    orderId: row.order_id,
+    customerId: row.customer_id,
+    customerName: row.customer_name,
+    openQty: row.open_qty,
+    actionQty: qty,
+    lineCount: 1,
+    priorityRank: row.priority_rank,
+    promisedDate: row.promised_date,
+  })
+}
+
+function addSkuQty(
+  map: Map<string, SkuBucket>,
+  row: PlanningAllocationRow,
+  qty: number,
+  shapeMap: Map<string, string>,
+  colourMap: Map<string, string>,
+  sizeMap: Map<string, string>,
+): void {
+  const key = `${row.shape_design_id}|${row.bindi_colour_id}|${row.size_id}`
+  const existing = map.get(key)
+  if (existing) {
+    existing.qty += qty
+    existing.demandQty += row.shortage_qty
+    existing.customerCount += 1
+    existing.priorityRank = Math.min(existing.priorityRank, row.priority_rank)
+    existing.conversionRateMissing = existing.conversionRateMissing || row.conversion_rate_missing
+    return
+  }
+
+  map.set(key, {
+    key,
+    shape: shapeMap.get(row.shape_design_id) ?? row.shape_design_id,
+    colour: colourMap.get(row.bindi_colour_id) ?? row.bindi_colour_id,
+    size: sizeMap.get(row.size_id) ?? row.size_id,
+    qty,
+    demandQty: row.shortage_qty,
+    customerCount: 1,
+    priorityRank: row.priority_rank,
+    conversionRateMissing: row.conversion_rate_missing,
+  })
+}
+
+function sortedOrderBuckets(map: Map<string, OrderBucket>): OrderBucket[] {
+  return [...map.values()].sort((a, b) => a.priorityRank - b.priorityRank || b.actionQty - a.actionQty)
+}
+
+function sortedSkuBuckets(map: Map<string, SkuBucket>): SkuBucket[] {
+  return [...map.values()].sort((a, b) => a.priorityRank - b.priorityRank || b.qty - a.qty)
+}
+
+function firstRelationName<T extends { name: string }>(relation: T | T[] | null): string {
+  const resolved = Array.isArray(relation) ? relation[0] : relation
+  return resolved?.name ?? 'Unknown'
+}
+
+function firstMachineName(
+  relation: { code: string; name: string | null } | { code: string; name: string | null }[] | null,
+): string {
+  const resolved = Array.isArray(relation) ? relation[0] : relation
+  if (!resolved) return 'Unknown machine'
+  return resolved.name ? `${resolved.code} / ${resolved.name}` : resolved.code
 }
 
 export default async function DashboardPage() {
   const supabase = createServerSupabaseClient()
 
-  const [planningResult, labourResult, readyStockResult, velvetResult] = await Promise.allSettled([
+  const [
+    allocationResult,
+    shapesResult,
+    bindiResult,
+    sizesResult,
+    dispatchResult,
+    labourResult,
+    cuttingResult,
+  ] = await Promise.allSettled([
     fetchPlanningAllocation(supabase),
-    supabase.from('labour_jobs').select('id, status').eq('status', 'open'),
-    supabase.from('ready_stock_balance').select('available_qty').gt('available_qty', 0),
-    supabase.from('velvet_stock_balance').select('available_qty, bundles').gt('available_qty', 0),
+    supabase.from('shape_designs').select('id, code, name, sort_order').order('sort_order'),
+    supabase.from('bindi_colours').select('id, code, name, sort_order').order('sort_order'),
+    supabase.from('sizes').select('id, code, name, sort_order').order('sort_order'),
+    supabase
+      .from('dispatch_events')
+      .select('id, dispatch_date, customers(name)')
+      .eq('status', 'confirmed')
+      .order('dispatch_date', { ascending: false })
+      .limit(1),
+    supabase
+      .from('labour_jobs')
+      .select('id, assigned_date, labour_units(name)')
+      .order('assigned_date', { ascending: false })
+      .limit(1),
+    supabase
+      .from('cutting_sessions')
+      .select('id, session_date, machines(code, name)')
+      .eq('status', 'confirmed')
+      .order('session_date', { ascending: false })
+      .limit(1),
   ])
 
-  const planningRows: PlanningAllocationRow[] =
-    planningResult.status === 'fulfilled' ? planningResult.value : []
+  const rows: PlanningAllocationRow[] =
+    allocationResult.status === 'fulfilled' ? allocationResult.value : []
 
-  const activeLabourJobs =
-    labourResult.status === 'fulfilled' ? (labourResult.value.data ?? []).length : 0
+  const shapes = shapesResult.status === 'fulfilled' ? (shapesResult.value.data ?? []) as LookupRow[] : []
+  const bindis = bindiResult.status === 'fulfilled' ? (bindiResult.value.data ?? []) as LookupRow[] : []
+  const sizes = sizesResult.status === 'fulfilled' ? (sizesResult.value.data ?? []) as LookupRow[] : []
+  const shapeMap = buildLookup(shapes, true)
+  const colourMap = buildLookup(bindis)
+  const sizeMap = buildLookup(sizes)
 
-  const totalReadyQty =
-    readyStockResult.status === 'fulfilled'
-      ? (readyStockResult.value.data ?? []).reduce((s, r) => s + Number(r.available_qty), 0)
-      : 0
+  const dispatchMap = new Map<string, OrderBucket>()
+  const labourMap = new Map<string, OrderBucket>()
+  const cutMap = new Map<string, SkuBucket>()
+  const procureMap = new Map<string, SkuBucket>()
 
-  const velvetBundles =
-    velvetResult.status === 'fulfilled'
-      ? (velvetResult.value.data ?? []).reduce((s, r) => s + Number(r.bundles ?? 0), 0)
-      : 0
+  for (const row of rows) {
+    if (row.ready_allocated_qty > 0) {
+      addOrderQty(dispatchMap, row, row.ready_allocated_qty)
+    }
 
-  // Derive stats from planning rows
-  const openOrderIds = new Set(planningRows.map((r) => r.order_id))
-  const totalOpenQty = planningRows.reduce((s, r) => s + r.open_qty, 0)
-  const readyToDispatch = planningRows.filter(
-    (r) => r.planning_status === 'ready_to_dispatch' || r.planning_status === 'ready_to_dispatch_override',
-  )
-  const shortageRows = planningRows.filter(
-    (r) =>
-      r.planning_status === 'cut_on_machine' ||
-      r.planning_status === 'cut_on_machine_override' ||
-      r.planning_status === 'procure_velvet',
-  )
-  const totalWipQty = planningRows.reduce((s, r) => s + r.wip_allocated_qty, 0)
+    if (row.cuttings_allocated_qty > 0) {
+      addOrderQty(labourMap, row, row.cuttings_allocated_qty)
+    }
 
-  // Top 5 ready to dispatch
-  const topReadyLines = readyToDispatch.slice(0, 5)
+    if (row.planning_status === 'cut_on_machine' || row.planning_status === 'cut_on_machine_override') {
+      addSkuQty(cutMap, row, row.recommended_cut_qty || row.shortage_qty, shapeMap, colourMap, sizeMap)
+    }
 
-  // Top 5 needs attention (shortages + give_to_labour)
-  const attentionRows = planningRows
-    .filter(
-      (r) =>
-        r.planning_status === 'cut_on_machine' ||
-        r.planning_status === 'procure_velvet' ||
-        r.planning_status === 'cut_on_machine_override' ||
-        r.planning_status === 'give_to_labour' ||
-        r.planning_status === 'give_to_labour_override',
-    )
-    .slice(0, 5)
+    if (row.planning_status === 'procure_velvet') {
+      addSkuQty(procureMap, row, row.shortage_qty, shapeMap, colourMap, sizeMap)
+    }
+  }
+
+  const dispatchOrders = sortedOrderBuckets(dispatchMap)
+  const labourOrders = sortedOrderBuckets(labourMap)
+  const cutSkus = sortedSkuBuckets(cutMap)
+  const procureSkus = sortedSkuBuckets(procureMap)
+
+  const recentActivity: RecentActivity[] = []
+  if (dispatchResult.status === 'fulfilled') {
+    const event = ((dispatchResult.value.data ?? []) as unknown as DispatchEventRow[])[0]
+    if (event) {
+      recentActivity.push({
+        label: `Dispatch / ${firstRelationName(event.customers)}`,
+        href: `/dispatch/${event.id}`,
+        meta: event.dispatch_date,
+      })
+    }
+  }
+  if (labourResult.status === 'fulfilled') {
+    const job = ((labourResult.value.data ?? []) as unknown as LabourJobRow[])[0]
+    if (job) {
+      recentActivity.push({
+        label: `Labour / ${firstRelationName(job.labour_units)}`,
+        href: `/operations/labour-jobs/${job.id}`,
+        meta: job.assigned_date,
+      })
+    }
+  }
+  if (cuttingResult.status === 'fulfilled') {
+    const session = ((cuttingResult.value.data ?? []) as unknown as CuttingSessionRow[])[0]
+    if (session) {
+      recentActivity.push({
+        label: `Cutting / ${firstMachineName(session.machines)}`,
+        href: `/operations/cutting-sessions/${session.id}`,
+        meta: session.session_date,
+      })
+    }
+  }
+
+  const totalReadyQty = dispatchOrders.reduce((sum, order) => sum + order.actionQty, 0)
+  const totalLabourQty = labourOrders.reduce((sum, order) => sum + order.actionQty, 0)
+  const totalCutQty = cutSkus.reduce((sum, sku) => sum + sku.qty, 0)
+  const totalProcureQty = procureSkus.reduce((sum, sku) => sum + sku.qty, 0)
 
   return (
-    <main style={{ padding: '1.5rem 2rem', maxWidth: '1400px' }}>
-      {/* Stats row */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-          gap: '1rem',
-          marginBottom: '1.5rem',
-        }}
-      >
-        <StatCard
-          label="Open Orders"
-          value={openOrderIds.size}
-          sub={`${fmt(totalOpenQty)} gross open`}
-          icon={ShoppingCart}
-        />
-        <StatCard
-          label="Ready to Dispatch"
-          value={readyToDispatch.length}
-          sub="lines ready"
-          icon={CheckCircle}
-          variant={readyToDispatch.length > 0 ? 'success' : 'default'}
-        />
-        <StatCard
-          label="Shortages"
-          value={shortageRows.length}
-          sub="lines need production"
-          icon={AlertTriangle}
-          variant={shortageRows.length > 0 ? 'danger' : 'default'}
-        />
-        <StatCard
-          label="In Labour (WIP)"
-          value={activeLabourJobs}
-          sub={`${fmt(totalWipQty)} gross`}
-          icon={Clock}
-          variant="info"
-        />
-        <StatCard
-          label="Velvet Stock"
-          value={velvetBundles > 0 ? `${velvetBundles} bdl` : fmt(totalReadyQty)}
-          sub={velvetBundles > 0 ? undefined : 'gross ready stock'}
-          icon={Package}
-          variant={velvetBundles > 0 && velvetBundles < 5 ? 'warning' : 'default'}
-        />
-      </div>
-
-      {/* Panels row */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-          gap: '1rem',
-          marginBottom: '1.5rem',
-        }}
-      >
-        {/* Ready to Dispatch */}
-        <Card style={{ borderLeft: '3px solid var(--success)' }}>
-          <SectionHeader title="Ready to Dispatch" count={readyToDispatch.length} color="var(--success)" />
-          {topReadyLines.length === 0 ? (
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: '0.75rem 0' }}>
-              No lines ready to dispatch.
-            </p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {topReadyLines.map((row) => (
-                <div
-                  key={row.order_line_id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '0.5rem 0.65rem',
-                    background: 'var(--bg-elevated)',
-                    borderRadius: 'var(--radius-sm)',
-                    gap: '0.5rem',
-                  }}
-                >
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {row.customer_name}
-                    </div>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
-                      Open: <strong style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{row.open_qty}</strong>
-                    </div>
-                  </div>
-                  <Link
-                    href={`/dispatch/new?customer_id=${row.customer_id}`}
-                    style={{
-                      fontSize: 'var(--text-xs)',
-                      padding: '0.25rem 0.6rem',
-                      background: 'var(--success-subtle)',
-                      color: 'var(--success)',
-                      borderRadius: 'var(--radius-sm)',
-                      fontWeight: 600,
-                      flexShrink: 0,
-                    }}
-                  >
-                    Dispatch
-                  </Link>
-                </div>
-              ))}
-            </div>
-          )}
-          <Link
-            href="/planning/allocation"
-            style={{ display: 'block', marginTop: '0.75rem', fontSize: 'var(--text-xs)', color: 'var(--accent)' }}
-          >
-            View all in Plan →
-          </Link>
-        </Card>
-
-        {/* Needs Attention */}
-        <Card style={{ borderLeft: `3px solid ${attentionRows.length > 0 ? 'var(--warning)' : 'var(--border)'}` }}>
-          <SectionHeader title="Needs Attention" count={attentionRows.length} color={attentionRows.length > 0 ? 'var(--warning)' : undefined} />
-          {attentionRows.length === 0 ? (
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: '0.75rem 0' }}>
-              No urgent lines. All demand is covered.
-            </p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {attentionRows.map((row) => (
-                <div
-                  key={row.order_line_id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '0.5rem 0.65rem',
-                    background: 'var(--bg-elevated)',
-                    borderRadius: 'var(--radius-sm)',
-                    gap: '0.5rem',
-                  }}
-                >
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {row.customer_name}
-                    </div>
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
-                      Open: <strong style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{row.open_qty}</strong>
-                    </div>
-                  </div>
-                  <Badge
-                    variant={statusBadgeVariant(row.planning_status)}
-                    label={STATUS_LABEL[row.planning_status] ?? row.planning_status.replace(/_/g, ' ')}
-                    size="sm"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-          <Link
-            href="/planning/allocation"
-            style={{ display: 'block', marginTop: '0.75rem', fontSize: 'var(--text-xs)', color: 'var(--accent)' }}
-          >
-            View all in Plan →
-          </Link>
-        </Card>
-      </div>
-
-      {/* Quick Actions */}
-      <div>
-        <SectionHeader title="Quick Actions" />
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', paddingTop: '0.25rem' }}>
-          <QuickAction href="/orders/new" icon={<Plus size={24} />} label="New Order" />
-          <QuickAction href="/operations/cutting-sessions/new" icon={<Scissors size={24} />} label="Cutting Session" />
-          <QuickAction href="/planning/labour-issue" icon={<Users size={24} />} label="Issue to Labour" />
-          <QuickAction href="/dispatch/new" icon={<Truck size={24} />} label="New Dispatch" />
+    <main className="dashboard-page">
+      <section className="dashboard-hero">
+        <div>
+          <span className="dashboard-eyebrow">Today&apos;s command center</span>
+          <h1>Stock Brain</h1>
+          <p>
+            Dispatch what is ready, issue cuttings to labour, cut what is short,
+            and catch raw material gaps before they slow the parcel.
+          </p>
         </div>
-      </div>
+        <div className="dashboard-hero-actions">
+          <Link href="/orders/new">New Order</Link>
+          <Link href="/dispatch/new">New Dispatch</Link>
+        </div>
+      </section>
+
+      <section className="dashboard-command-grid">
+        <CommandSummary
+          href="/dispatch"
+          icon={Truck}
+          label="Ready To Dispatch"
+          value={dispatchOrders.length}
+          sub={`${fmt(totalReadyQty)} gross ready`}
+          tone="success"
+        />
+        <CommandSummary
+          href="/planning/labour-issue"
+          icon={Users}
+          label="Give To Labour"
+          value={labourOrders.length}
+          sub={`${fmt(totalLabourQty)} gross issue`}
+          tone="warning"
+        />
+        <CommandSummary
+          href="/planning/cutting-required"
+          icon={Scissors}
+          label="Cut On Machine"
+          value={cutSkus.length}
+          sub={`${fmt(totalCutQty)} gross cut`}
+          tone="info"
+        />
+        <CommandSummary
+          href="/planning/cutting-required"
+          icon={PackageX}
+          label="Procure Velvet"
+          value={procureSkus.length}
+          sub={`${fmt(totalProcureQty)} gross blocked`}
+          tone={procureSkus.length > 0 ? 'danger' : 'default'}
+        />
+      </section>
+
+      {allocationResult.status === 'rejected' && (
+        <Card className="dashboard-alert" style={{ borderColor: 'var(--danger)' }}>
+          <AlertTriangle size={18} />
+          <span>Planning engine data could not be loaded. Dashboard actions may be incomplete.</span>
+        </Card>
+      )}
+
+      <section className="dashboard-work-grid">
+        <DashboardPanel
+          title="Ready To Dispatch"
+          count={dispatchOrders.length}
+          color="var(--success)"
+          href="/dispatch"
+          actionLabel="Open Dispatch"
+        >
+          <OrderList
+            emptyText="No orders have ready stock allocated right now."
+            orders={dispatchOrders.slice(0, 6)}
+            qtyLabel="Ready"
+            hrefFor={(order) => `/dispatch/new?order_id=${order.orderId}`}
+            cta="Dispatch"
+            tone="success"
+          />
+        </DashboardPanel>
+
+        <DashboardPanel
+          title="Give To Labour"
+          count={labourOrders.length}
+          color="var(--warning)"
+          href="/planning/labour-issue"
+          actionLabel="Open Labour Issue"
+        >
+          <OrderList
+            emptyText="No cuttings are waiting to be issued to labour."
+            orders={labourOrders.slice(0, 6)}
+            qtyLabel="Issue"
+            hrefFor={() => '/planning/labour-issue'}
+            cta="Issue"
+            tone="warning"
+          />
+        </DashboardPanel>
+
+        <DashboardPanel
+          title="Cut On Machine"
+          count={cutSkus.length}
+          color="var(--info)"
+          href="/planning/cutting-required"
+          actionLabel="Cutting Required"
+        >
+          <SkuList
+            emptyText="No machine cutting is needed from current planning."
+            skus={cutSkus.slice(0, 6)}
+            qtyLabel="Cut"
+            tone="info"
+          />
+        </DashboardPanel>
+
+        <DashboardPanel
+          title="Procure Velvet"
+          count={procureSkus.length}
+          color={procureSkus.length > 0 ? 'var(--danger)' : 'var(--text-secondary)'}
+          href="/planning/cutting-required"
+          actionLabel="Review"
+        >
+          <SkuList
+            emptyText="No velvet procurement block is showing right now."
+            skus={procureSkus.slice(0, 6)}
+            qtyLabel="Blocked"
+            tone="danger"
+          />
+        </DashboardPanel>
+      </section>
+
+      <section className="dashboard-lower-grid">
+        <div>
+          <SectionHeader title="Quick Actions" />
+          <div className="dashboard-quick-actions">
+            <QuickAction href="/orders/new" icon={<Plus size={24} />} label="New Order" />
+            <QuickAction href="/operations/cutting-sessions/new" icon={<Scissors size={24} />} label="Cutting Session" />
+            <QuickAction href="/planning/labour-issue" icon={<Users size={24} />} label="Issue to Labour" />
+            <QuickAction href="/dispatch/new" icon={<Truck size={24} />} label="New Dispatch" />
+          </div>
+        </div>
+
+        <div>
+          <SectionHeader title="Recent Activity" />
+          <Card padding="sm">
+            {recentActivity.length === 0 ? (
+              <p className="dashboard-empty">No recent activity found.</p>
+            ) : (
+              <div className="dashboard-activity-list">
+                {recentActivity.map((activity) => (
+                  <Link key={activity.href} href={activity.href} className="dashboard-activity-item">
+                    <span>{activity.label}</span>
+                    <small>{activity.meta}</small>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+      </section>
     </main>
   )
 }
 
-function QuickAction({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
+function CommandSummary({
+  href,
+  icon: Icon,
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  href: string
+  icon: LucideIcon
+  label: string
+  value: number
+  sub: string
+  tone: 'success' | 'warning' | 'info' | 'danger' | 'default'
+}) {
   return (
-    <Link
-      href={href}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '0.5rem',
-        padding: '1.25rem 1.5rem',
-        minHeight: '80px',
-        minWidth: '120px',
-        background: 'var(--bg-surface)',
-        border: '1px solid var(--border)',
-        borderBottom: '3px solid var(--accent)',
-        borderRadius: 'var(--radius-md)',
-        fontSize: 'var(--text-sm)',
-        fontWeight: 600,
-        color: 'var(--text-primary)',
-        transition: 'box-shadow 200ms ease, transform 200ms ease, border-color 200ms ease',
-        boxShadow: 'var(--shadow-sm)',
-        textAlign: 'center',
-      }}
-    >
-      <span style={{ color: 'var(--accent)', display: 'flex' }}>{icon}</span>
+    <Link href={href} className={`dashboard-command-card dashboard-command-${tone}`}>
+      <span className="dashboard-command-icon"><Icon size={20} /></span>
+      <span className="dashboard-command-label">{label}</span>
+      <strong>{value}</strong>
+      <small>{sub}</small>
+    </Link>
+  )
+}
+
+function DashboardPanel({
+  title,
+  count,
+  color,
+  href,
+  actionLabel,
+  children,
+}: {
+  title: string
+  count: number
+  color: string
+  href: string
+  actionLabel: string
+  children: ReactNode
+}) {
+  return (
+    <Card className="dashboard-panel">
+      <SectionHeader
+        title={title}
+        count={count}
+        color={color}
+        actions={
+          <Link href={href} className="dashboard-panel-link">
+            {actionLabel} <ArrowRight size={12} />
+          </Link>
+        }
+      />
+      {children}
+    </Card>
+  )
+}
+
+function OrderList({
+  orders,
+  emptyText,
+  qtyLabel,
+  hrefFor,
+  cta,
+  tone,
+}: {
+  orders: OrderBucket[]
+  emptyText: string
+  qtyLabel: string
+  hrefFor: (order: OrderBucket) => string
+  cta: string
+  tone: 'success' | 'warning'
+}) {
+  if (orders.length === 0) {
+    return <p className="dashboard-empty">{emptyText}</p>
+  }
+
+  return (
+    <div className="dashboard-list">
+      {orders.map((order) => (
+        <Link key={order.orderId} href={hrefFor(order)} className="dashboard-order-item">
+          <span>
+            <strong>{order.customerName}</strong>
+            <small>
+              Open {fmt(order.openQty)} / {qtyLabel} {fmt(order.actionQty)} / {order.lineCount} line{order.lineCount === 1 ? '' : 's'}
+            </small>
+          </span>
+          <Badge variant={tone === 'success' ? 'success' : 'warning'} label={cta} size="sm" />
+        </Link>
+      ))}
+    </div>
+  )
+}
+
+function SkuList({
+  skus,
+  emptyText,
+  qtyLabel,
+  tone,
+}: {
+  skus: SkuBucket[]
+  emptyText: string
+  qtyLabel: string
+  tone: 'info' | 'danger'
+}) {
+  if (skus.length === 0) {
+    return <p className="dashboard-empty">{emptyText}</p>
+  }
+
+  return (
+    <div className="dashboard-list">
+      {skus.map((sku) => (
+        <Link key={sku.key} href="/planning/cutting-required" className="dashboard-order-item">
+          <span>
+            <strong>{sku.shape} / {sku.colour} / {sku.size}</strong>
+            <small>
+              {qtyLabel} {fmt(sku.qty)} gross / {sku.customerCount} customer{sku.customerCount === 1 ? '' : 's'}
+            </small>
+          </span>
+          <Badge
+            variant={tone === 'info' ? 'info' : 'danger'}
+            label={sku.conversionRateMissing ? 'Rate Missing' : qtyLabel}
+            size="sm"
+          />
+        </Link>
+      ))}
+    </div>
+  )
+}
+
+function QuickAction({ href, icon, label }: { href: string; icon: ReactNode; label: string }) {
+  return (
+    <Link href={href} className="dashboard-quick-action">
+      <span>{icon}</span>
       {label}
     </Link>
   )
