@@ -2,11 +2,21 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { CreateOrderForm } from './Form'
 import type { MasterOption } from './Form'
 
+type CustomerOptionRow = {
+  id: string
+  name: string
+  default_dabbi_colour_id?: string | null
+}
+
+function isMissingDefaultDabbiColumn(message: string): boolean {
+  return message.includes('default_dabbi_colour_id')
+}
+
 export default async function NewOrderPage() {
   const supabase = createServerSupabaseClient()
 
   // Fetch all master dropdowns in parallel.
-  const [customers, shapes, bindiColours, sizes, dabbiColours] = await Promise.all([
+  const [customersInitial, shapes, bindiColours, sizes, dabbiColours] = await Promise.all([
     supabase
       .from('customers')
       .select('id, name, default_dabbi_colour_id')
@@ -35,13 +45,21 @@ export default async function NewOrderPage() {
       .order('code'),
   ])
 
+  const customers = customersInitial.error && isMissingDefaultDabbiColumn(customersInitial.error.message)
+    ? await supabase
+        .from('customers')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name')
+    : customersInitial
+
   const toOption = (row: { id: string; label: string; defaultDabbiColourId?: string | null }): MasterOption => ({
     id: row.id,
     label: row.label,
     defaultDabbiColourId: row.defaultDabbiColourId ?? null,
   })
 
-  const customerOptions: MasterOption[] = (customers.data ?? []).map((c) =>
+  const customerOptions: MasterOption[] = ((customers.data ?? []) as unknown as CustomerOptionRow[]).map((c) =>
     toOption({ id: c.id, label: c.name, defaultDabbiColourId: c.default_dabbi_colour_id }),
   )
   const shapeOptions: MasterOption[] = (shapes.data ?? []).map((s) =>

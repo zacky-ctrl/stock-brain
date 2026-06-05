@@ -5,12 +5,26 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import type { CustomerRow, DabbiOption } from './CustomerCards'
 
+const CUSTOMER_SELECT =
+  'id, name, entity_name, address, phone_number, transport_name, default_dabbi_colour_id, yellow_rate_per_gross, white_rate_per_gross, brand_rule, payment_risk_flag, notes, is_active, created_at'
+
+const CUSTOMER_SELECT_LEGACY =
+  'id, name, entity_name, address, phone_number, transport_name, yellow_rate_per_gross, white_rate_per_gross, brand_rule, payment_risk_flag, notes, is_active, created_at'
+
+type CustomerQueryRow = Omit<CustomerRow, 'default_dabbi_colour_id'> & {
+  default_dabbi_colour_id?: string | null
+}
+
+function isMissingDefaultDabbiColumn(message: string): boolean {
+  return message.includes('default_dabbi_colour_id')
+}
+
 export default async function CustomersPage() {
   const supabase = createServerSupabaseClient()
-  const [customersResult, dabbiResult] = await Promise.all([
+  const [customersResultInitial, dabbiResult] = await Promise.all([
     supabase
       .from('customers')
-      .select('id, name, entity_name, address, phone_number, transport_name, default_dabbi_colour_id, yellow_rate_per_gross, white_rate_per_gross, brand_rule, payment_risk_flag, notes, is_active, created_at')
+      .select(CUSTOMER_SELECT)
       .order('name'),
     supabase
       .from('dabbi_colours')
@@ -19,7 +33,14 @@ export default async function CustomersPage() {
       .order('code'),
   ])
 
-  const customers = (customersResult.data ?? []) as unknown as CustomerRow[]
+  const customersResult = customersResultInitial.error && isMissingDefaultDabbiColumn(customersResultInitial.error.message)
+    ? await supabase.from('customers').select(CUSTOMER_SELECT_LEGACY).order('name')
+    : customersResultInitial
+
+  const customers = ((customersResult.data ?? []) as unknown as CustomerQueryRow[]).map((customer) => ({
+    ...customer,
+    default_dabbi_colour_id: customer.default_dabbi_colour_id ?? null,
+  }))
   const dabbiColours: DabbiOption[] = (dabbiResult.data ?? []).map((dabbi) => ({
     id: dabbi.id as string,
     label: `${dabbi.code} — ${dabbi.name}`,

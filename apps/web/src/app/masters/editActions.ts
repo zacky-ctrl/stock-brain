@@ -18,6 +18,10 @@ async function updateMaster(
   return { success: 'Updated.' }
 }
 
+function isMissingDefaultDabbiColumn(message: string): boolean {
+  return message.includes('default_dabbi_colour_id')
+}
+
 export async function updateShapeDesign(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const id = fd.get('id') as string
   if (!id) return { error: 'ID missing' }
@@ -81,7 +85,7 @@ export async function updateCustomer(_prev: ActionState, fd: FormData): Promise<
   const whiteRate = whiteRateRaw ? Number(whiteRateRaw) : null
   if (yellowRate !== null && !Number.isFinite(yellowRate)) return { error: 'Yellow rate is invalid' }
   if (whiteRate !== null && !Number.isFinite(whiteRate)) return { error: 'White rate is invalid' }
-  return updateMaster('customers', id, {
+  const updates = {
     name: fd.get('name') as string,
     entity_name: (fd.get('entity_name') as string) || null,
     address: (fd.get('address') as string) || null,
@@ -94,7 +98,25 @@ export async function updateCustomer(_prev: ActionState, fd: FormData): Promise<
     payment_risk_flag: fd.get('payment_risk_flag') === 'true',
     notes: (fd.get('notes') as string) || null,
     is_active: fd.get('is_active') === 'true',
-  }, ['/masters/customers', '/planning/allocation'])
+  }
+
+  const result = await updateMaster('customers', id, updates, ['/masters/customers', '/planning/allocation'])
+  if (!result || !('error' in result) || !isMissingDefaultDabbiColumn(result.error)) return result
+
+  const legacyUpdates = {
+    name: updates.name,
+    entity_name: updates.entity_name,
+    address: updates.address,
+    phone_number: updates.phone_number,
+    transport_name: updates.transport_name,
+    yellow_rate_per_gross: updates.yellow_rate_per_gross,
+    white_rate_per_gross: updates.white_rate_per_gross,
+    brand_rule: updates.brand_rule,
+    payment_risk_flag: updates.payment_risk_flag,
+    notes: updates.notes,
+    is_active: updates.is_active,
+  }
+  return updateMaster('customers', id, legacyUpdates, ['/masters/customers', '/planning/allocation'])
 }
 
 export async function updateLabourUnit(_prev: ActionState, fd: FormData): Promise<ActionState> {

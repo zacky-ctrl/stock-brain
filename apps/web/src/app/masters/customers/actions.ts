@@ -4,6 +4,24 @@ import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import type { ActionState } from '@/lib/masters'
 
+type CustomerInsert = {
+  name: string
+  entity_name: string | null
+  address: string | null
+  phone_number: string | null
+  transport_name: string | null
+  default_dabbi_colour_id?: string | null
+  yellow_rate_per_gross: number | null
+  white_rate_per_gross: number | null
+  brand_rule: string
+  priority_weight: number
+  payment_risk_flag: boolean
+}
+
+function isMissingDefaultDabbiColumn(message: string): boolean {
+  return message.includes('default_dabbi_colour_id')
+}
+
 export async function addCustomer(
   _prevState: ActionState,
   formData: FormData,
@@ -32,7 +50,7 @@ export async function addCustomer(
 
   try {
     const supabase = createServerSupabaseClient()
-    const { error } = await supabase.from('customers').insert({
+    const payload: CustomerInsert = {
       name,
       entity_name: entityName,
       address,
@@ -44,8 +62,26 @@ export async function addCustomer(
       brand_rule: brandRule,
       priority_weight: 5,
       payment_risk_flag: paymentRiskFlag,
-    })
-    if (error) return { error: error.message }
+    }
+    const { error } = await supabase.from('customers').insert(payload)
+    if (error && isMissingDefaultDabbiColumn(error.message)) {
+      const legacyPayload: Omit<CustomerInsert, 'default_dabbi_colour_id'> = {
+        name: payload.name,
+        entity_name: payload.entity_name,
+        address: payload.address,
+        phone_number: payload.phone_number,
+        transport_name: payload.transport_name,
+        yellow_rate_per_gross: payload.yellow_rate_per_gross,
+        white_rate_per_gross: payload.white_rate_per_gross,
+        brand_rule: payload.brand_rule,
+        priority_weight: payload.priority_weight,
+        payment_risk_flag: payload.payment_risk_flag,
+      }
+      const retry = await supabase.from('customers').insert(legacyPayload)
+      if (retry.error) return { error: retry.error.message }
+    } else if (error) {
+      return { error: error.message }
+    }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to save' }
   }
