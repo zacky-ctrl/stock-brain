@@ -43,6 +43,7 @@ export interface DispatchStore {
   insertDispatchEvent(data: {
     customer_id: string
     dispatch_date: string
+    challan_number?: string | null
     reference: string | null
     notes: string | null
     actor: string

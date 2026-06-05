@@ -34,6 +34,36 @@ export function AddCustomerForm() {
           <input name="name" style={inputStyle} placeholder="e.g. Shree Traders" />
         </div>
         <div style={fieldWrap}>
+          <label>Entity Name</label>
+          <input name="entity_name" style={inputStyle} placeholder="Billing / firm name" />
+        </div>
+        <div style={fieldWrap}>
+          <label>Address</label>
+          <input name="address" style={inputStyle} placeholder="Full dispatch / billing address" />
+        </div>
+        <div style={fieldWrap}>
+          <label>Phone Number</label>
+          <input name="phone_number" style={inputStyle} placeholder="Customer phone" />
+        </div>
+        <div style={fieldWrap}>
+          <label>Transport Name</label>
+          <input name="transport_name" style={inputStyle} placeholder="Preferred transport" />
+        </div>
+        <div style={fieldWrap}>
+          <label>Rate Group</label>
+          <input name="rate_group" style={inputStyle} placeholder="e.g. Wholesale A" />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+          <div style={fieldWrap}>
+            <label>Yellow Rate / gross</label>
+            <input name="yellow_rate_per_gross" type="number" step="0.01" min="0" style={inputStyle} />
+          </div>
+          <div style={fieldWrap}>
+            <label>White Rate / gross</label>
+            <input name="white_rate_per_gross" type="number" step="0.01" min="0" style={inputStyle} />
+          </div>
+        </div>
+        <div style={fieldWrap}>
           <label>Brand Rule</label>
           <select name="brand_rule" style={selectStyle}>
             {BRAND_RULES.map((r) => (

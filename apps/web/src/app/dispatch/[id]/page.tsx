@@ -6,6 +6,7 @@ import type { AffectedOrder } from './VoidDispatchForm'
 import { Badge, statusBadgeVariant } from '@/components/ui/Badge'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Card } from '@/components/ui/Card'
+import { PrintButton } from '@/components/ui/PrintButton'
 import type { CSSProperties } from 'react'
 import Link from 'next/link'
 
@@ -38,14 +39,28 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
 
   const { data: eventRaw, error: eventErr } = await supabase
     .from('dispatch_events')
-    .select('id, dispatch_date, reference, status, notes, confirmed_at, customers(name)')
+    .select('id, dispatch_date, challan_number, invoice_number, reference, status, notes, confirmed_at, customers(name, entity_name, address, phone_number, transport_name)')
     .eq('id', id)
     .single()
 
   if (eventErr || !eventRaw) notFound()
 
   type EventRow = typeof eventRaw & {
-    customers: { name: string } | { name: string }[] | null
+    challan_number: string | null
+    invoice_number: string | null
+    customers: {
+      name: string
+      entity_name: string | null
+      address: string | null
+      phone_number: string | null
+      transport_name: string | null
+    } | Array<{
+      name: string
+      entity_name: string | null
+      address: string | null
+      phone_number: string | null
+      transport_name: string | null
+    }> | null
   }
   const event = eventRaw as unknown as EventRow
   const customer = resolveRef(event.customers)
@@ -157,7 +172,9 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
 
   const dispatchDate = (event as { dispatch_date: string }).dispatch_date
   const dispatchRef = (event as { reference?: string | null }).reference
-  const pageTitle = `Dispatch — ${dispatchDate}${dispatchRef ? ` — ${dispatchRef}` : ''}`
+  const challanNumber = event.challan_number ?? 'Pending challan number'
+  const invoiceNumber = event.invoice_number
+  const pageTitle = `Challan — ${challanNumber}`
 
   return (
     <main style={{ padding: '1.5rem 2rem', maxWidth: '1200px' }}>
@@ -166,11 +183,28 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
         backHref="/dispatch"
         badge={<Badge variant={statusBadgeVariant((event as { status: string }).status)} label={(event as { status: string }).status} size="sm" />}
         subtitle={(event as { id: string }).id}
+        actions={<PrintButton label="Print Challan" />}
       />
 
       {/* Meta */}
       <Card style={{ marginBottom: '1.5rem' }}>
-        <div style={metaRow}><span style={metaLabel}>Customer</span><span style={metaValue}>{(customer as { name: string } | null)?.name ?? '—'}</span></div>
+        <div style={metaRow}><span style={metaLabel}>Customer</span><span style={metaValue}>{customer?.name ?? '—'}</span></div>
+        {customer?.entity_name && (
+          <div style={metaRow}><span style={metaLabel}>Entity</span><span style={metaValue}>{customer.entity_name}</span></div>
+        )}
+        {customer?.address && (
+          <div style={metaRow}><span style={metaLabel}>Address</span><span style={{ ...metaValue, color: 'var(--text-secondary)' }}>{customer.address}</span></div>
+        )}
+        {customer?.phone_number && (
+          <div style={metaRow}><span style={metaLabel}>Phone</span><span style={metaValue}>{customer.phone_number}</span></div>
+        )}
+        {customer?.transport_name && (
+          <div style={metaRow}><span style={metaLabel}>Transport</span><span style={metaValue}>{customer.transport_name}</span></div>
+        )}
+        <div style={metaRow}><span style={metaLabel}>Challan No.</span><span style={{ ...metaValue, fontWeight: 700 }}>{challanNumber}</span></div>
+        {invoiceNumber && (
+          <div style={metaRow}><span style={metaLabel}>Invoice No.</span><span style={{ ...metaValue, fontWeight: 700 }}>{invoiceNumber}</span></div>
+        )}
         <div style={metaRow}><span style={metaLabel}>Date</span><span style={metaValue}>{dispatchDate}</span></div>
         {dispatchRef && (
           <div style={metaRow}><span style={metaLabel}>Reference</span><span style={metaValue}>{dispatchRef}</span></div>

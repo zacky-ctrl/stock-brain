@@ -150,11 +150,17 @@ export function createSupabaseDispatchStore(supabase: SupabaseClient): DispatchS
     // ── Write operations ──────────────────────────────────────────
 
     async insertDispatchEvent({ customer_id, dispatch_date, reference, notes, actor, confirmed_at }) {
+      const { data: challanNumber, error: challanError } = await supabase.rpc('next_dispatch_challan_number')
+      if (challanError || !challanNumber) {
+        throw new Error(challanError?.message ?? 'Failed to generate challan number')
+      }
+
       const { data, error } = await supabase
         .from('dispatch_events')
         .insert({
           customer_id,
           dispatch_date,
+          challan_number: String(challanNumber),
           reference,
           notes,
           status: 'confirmed',

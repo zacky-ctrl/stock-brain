@@ -77,8 +77,21 @@ export async function updateCustomer(_prev: ActionState, fd: FormData): Promise<
   if (!id) return { error: 'ID missing' }
   const priorityRaw = fd.get('priority_weight') as string
   const priority = parseFloat(priorityRaw)
+  const yellowRateRaw = (fd.get('yellow_rate_per_gross') as string ?? '').trim()
+  const whiteRateRaw = (fd.get('white_rate_per_gross') as string ?? '').trim()
+  const yellowRate = yellowRateRaw ? Number(yellowRateRaw) : null
+  const whiteRate = whiteRateRaw ? Number(whiteRateRaw) : null
+  if (yellowRate !== null && !Number.isFinite(yellowRate)) return { error: 'Yellow rate is invalid' }
+  if (whiteRate !== null && !Number.isFinite(whiteRate)) return { error: 'White rate is invalid' }
   return updateMaster('customers', id, {
     name: fd.get('name') as string,
+    entity_name: (fd.get('entity_name') as string) || null,
+    address: (fd.get('address') as string) || null,
+    phone_number: (fd.get('phone_number') as string) || null,
+    transport_name: (fd.get('transport_name') as string) || null,
+    rate_group: (fd.get('rate_group') as string) || null,
+    yellow_rate_per_gross: yellowRate,
+    white_rate_per_gross: whiteRate,
     priority_weight: Number.isFinite(priority) ? priority : 1,
     notes: (fd.get('notes') as string) || null,
     is_active: fd.get('is_active') === 'true',
