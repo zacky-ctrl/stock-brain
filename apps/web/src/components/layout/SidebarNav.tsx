@@ -20,6 +20,7 @@ import {
   Settings,
   Shield,
   Activity,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Home,
@@ -99,6 +100,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: '/admin/planning-overrides', label: 'Planning Override', icon: Shield },
       { href: '/admin/stock-correction',   label: 'Stock Correction',  icon: Shield },
       { href: '/admin/users',              label: 'Users',             icon: UserCheck },
+      { href: '/admin/audit',              label: 'Audit Trail',       icon: Activity },
     ],
   },
 ]
@@ -110,32 +112,28 @@ const MOBILE_TABS: NavItem[] = [
   { href: '/dispatch', label: 'Dispatch', icon: Truck },
 ]
 
-type RoleNavConfig = {
-  sections: string[]
-  excludeHrefs?: string[]
-}
-
-const NAV_BY_ROLE: Record<string, RoleNavConfig> = {
-  stock_operator: {
-    sections: ['DAILY', 'STOCK'],
-    excludeHrefs: ['/planning/allocation'],
-  },
-  manager: { sections: ['DAILY', 'STOCK', 'REPORTS'] },
-  accountant: { sections: ['REPORTS'] },
-  admin: { sections: ['DAILY', 'STOCK', 'REPORTS', 'SETTINGS'] },
+const ROLE_SECTIONS: Record<string, string[]> = {
+  admin: ['DAILY', 'STOCK', 'REPORTS', 'SETTINGS'],
+  manager: ['DAILY', 'STOCK', 'REPORTS'],
+  stock_operator: ['DAILY', 'STOCK'],
+  accountant: ['REPORTS'],
+  viewer: ['REPORTS'],
 }
 
 function getVisibleSections(role?: string): NavSection[] {
   if (!role) return NAV_SECTIONS
 
-  const config = NAV_BY_ROLE[role]
-  if (!config) return NAV_SECTIONS
+  const sectionLabels = ROLE_SECTIONS[role] ?? ['DAILY', 'STOCK', 'REPORTS', 'SETTINGS']
 
   return NAV_SECTIONS
-    .filter((section) => config.sections.includes(section.label))
+    .filter((section) => sectionLabels.includes(section.label))
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => !config.excludeHrefs?.includes(item.href)),
+      items: role === 'stock_operator' && section.label === 'STOCK'
+        ? section.items.filter((item) =>
+            item.href !== '/planning/allocation' &&
+            item.href !== '/admin/reservations')
+        : section.items,
     }))
 }
 
@@ -143,6 +141,12 @@ export function SidebarNav({ role }: Props) {
   const [collapsed, setCollapsed] = useState(true)
   const [hovered, setHovered] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => ({
+    DAILY: true,
+    STOCK: false,
+    REPORTS: false,
+    SETTINGS: false,
+  }))
   const pathname = usePathname()
   const visibleSections = getVisibleSections(role)
   const visibleItems = visibleSections.flatMap((section) => section.items)
@@ -154,6 +158,10 @@ export function SidebarNav({ role }: Props) {
   function isActive(href: string) {
     if (href === '/') return pathname === '/'
     return pathname === href || pathname.startsWith(href + '/')
+  }
+
+  function toggleSection(label: string) {
+    setOpenSections((prev) => ({ ...prev, [label]: !prev[label] }))
   }
 
   return (
@@ -197,8 +205,19 @@ export function SidebarNav({ role }: Props) {
           {visibleSections.map((section) => (
             <div key={section.label} style={{ marginBottom: '0.25rem' }}>
               {isExpanded && (
-                <div
+                <button
+                  type="button"
+                  onClick={() => toggleSection(section.label)}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-secondary)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)' }}
                   style={{
+                    width: '100%',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    background: 'none',
+                    border: 'none',
                     fontSize: '0.68rem',
                     fontWeight: 700,
                     color: 'var(--text-muted)',
@@ -208,11 +227,19 @@ export function SidebarNav({ role }: Props) {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {section.label}
-                </div>
+                  <span>{section.label}</span>
+                  <ChevronDown
+                    size={12}
+                    style={{
+                      flexShrink: 0,
+                      transform: openSections[section.label] ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.2s ease',
+                    }}
+                  />
+                </button>
               )}
               {!isExpanded && <div style={{ height: '0.5rem' }} />}
-              {section.items.map((item) => {
+              {(!isExpanded || openSections[section.label]) && section.items.map((item) => {
                 const active = isActive(item.href)
                 const Icon = item.icon
                 return (

@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAuthClient } from '@/lib/supabase/auth-client'
 import { fetchPlanningAllocation } from './fetchers'
 import { ReserveButton } from './ReserveButton'
 import { PlanningViewToggle } from './PlanningViewToggle'
@@ -61,10 +62,31 @@ type ActiveAlloc = {
   allocated_qty: number
 }
 
+async function fetchCurrentUserRole(): Promise<string | undefined> {
+  try {
+    const authClient = await createAuthClient()
+    const { data: { user } } = await authClient.auth.getUser()
+    if (!user?.email) return undefined
+
+    const supabase = createServerSupabaseClient()
+    const { data } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('email', user.email.toLowerCase())
+      .eq('is_active', true)
+      .single()
+
+    return data?.role ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
 // ── page ──────────────────────────────────────────────────────
 
 export default async function PlanningAllocationPage() {
   const supabase = createServerSupabaseClient()
+  const role = await fetchCurrentUserRole()
 
   let rows: PlanningAllocationRow[] = []
   let fetchError: string | null = null
@@ -580,6 +602,7 @@ export default async function PlanningAllocationPage() {
           designMaster={designMaster}
           colourMaster={colourMaster}
           printTitle={printTitle}
+          role={role}
         >
           {skuTableContent}
         </PlanningViewToggle>

@@ -70,10 +70,30 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
-  const role = roles[0]?.role
-  const adminOnlyRoutes = ['/admin', '/masters']
+  const role = roles[0]?.role as string | undefined
 
-  if (adminOnlyRoutes.some(r => pathname.startsWith(r)) && role !== 'admin') {
+  const adminPrefixes = ['/admin', '/masters']
+  if (adminPrefixes.some(p => pathname.startsWith(p)) && role !== 'admin') {
+    return NextResponse.redirect(new URL('/', request.url))
+  }
+
+  if (pathname.startsWith('/planning/allocation') &&
+      role !== 'admin' && role !== 'manager') {
+    return NextResponse.redirect(new URL('/', request.url))
+  }
+
+  if ((role === 'viewer' || role === 'accountant') &&
+      !pathname.startsWith('/reports') &&
+      !pathname.startsWith('/dispatch') &&
+      pathname !== '/') {
+    return NextResponse.redirect(new URL('/reports', request.url))
+  }
+
+  if (role === 'stock_operator' && (
+      pathname.startsWith('/reports') ||
+      pathname.startsWith('/planning/allocation') ||
+      pathname.startsWith('/admin') ||
+      pathname.startsWith('/masters'))) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 

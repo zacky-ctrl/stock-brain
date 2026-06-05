@@ -181,6 +181,7 @@ type Props = Omit<OrderGroupedViewProps, 'rows'> & {
   designMaster: DesignMasterRow[]
   colourMaster: ColourMasterRow[]
   printTitle: string
+  role?: string
 }
 
 const STORAGE_KEY = 'planning-view-v2'

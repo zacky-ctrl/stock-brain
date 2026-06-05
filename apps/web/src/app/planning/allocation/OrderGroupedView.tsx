@@ -79,12 +79,23 @@ function skuRowBg(row: PlanningRowEnriched): string | undefined {
 
 // ── sub-components ──────────────────────────────────────────────
 
-function PriorityBadge({ label, hasOverride, onClick }: { label: string; hasOverride: boolean; onClick: () => void }) {
+function PriorityBadge({
+  label,
+  hasOverride,
+  onClick,
+  canManagePlanning,
+}: {
+  label: string
+  hasOverride: boolean
+  onClick: () => void
+  canManagePlanning: boolean
+}) {
   return (
     <button
-      onClick={onClick}
+      type="button"
+      onClick={canManagePlanning ? onClick : undefined}
       style={{
-        cursor: 'pointer',
+        cursor: canManagePlanning ? 'pointer' : 'default',
         background: 'none',
         fontSize: 'var(--text-xs)',
         padding: '0.15rem 0.45rem',
@@ -94,7 +105,7 @@ function PriorityBadge({ label, hasOverride, onClick }: { label: string; hasOver
         color: hasOverride ? 'var(--accent)' : 'var(--text-secondary)',
         fontWeight: hasOverride ? 600 : 400,
       }}
-      title="Click to set priority"
+      title={canManagePlanning ? 'Click to set priority' : undefined}
     >
       {label}
     </button>
@@ -384,12 +395,14 @@ function ThreeDotMenu({
   hasReservations,
   onSetPriority,
   onReserve,
+  canManagePlanning,
 }: {
   orderId: string
   hasReservable: boolean
   hasReservations: boolean
   onSetPriority: () => void
   onReserve: () => void
+  canManagePlanning: boolean
 }) {
   const [open, setOpen] = useState(false)
 
@@ -469,15 +482,19 @@ function ThreeDotMenu({
             <Link href={`/orders/${orderId}`} style={linkItemStyle} onClick={() => setOpen(false)}>
               View Order
             </Link>
-            <div style={dividerStyle} />
-            <button style={itemStyle} onClick={() => handle(onSetPriority)}>Set Priority</button>
-            {(hasReservable || hasReservations) && (
-              <button
-                style={{ ...itemStyle, color: hasReservations ? 'var(--warning)' : 'var(--text-primary)' }}
-                onClick={() => handle(onReserve)}
-              >
-                {hasReservations ? 'Unreserve All' : 'Reserve All'}
-              </button>
+            {canManagePlanning && (
+              <>
+                <div style={dividerStyle} />
+                <button style={itemStyle} onClick={() => handle(onSetPriority)}>Set Priority</button>
+                {(hasReservable || hasReservations) && (
+                  <button
+                    style={{ ...itemStyle, color: hasReservations ? 'var(--warning)' : 'var(--text-primary)' }}
+                    onClick={() => handle(onReserve)}
+                  >
+                    {hasReservations ? 'Unreserve All' : 'Reserve All'}
+                  </button>
+                )}
+              </>
             )}
           </div>
         </>
@@ -565,6 +582,7 @@ export type OrderGroupedViewProps = {
   sizeMap: Record<string, string>
   dabbiMap: Record<string, string>
   reservationByLineId: Record<string, { id: string; order_line_id: string; ready_stock_balance_id: string; allocated_qty: number }>
+  role?: string
 }
 
 // ── main component ──────────────────────────────────────────────
@@ -576,6 +594,7 @@ export function OrderGroupedView({
   sizeMap,
   dabbiMap,
   reservationByLineId,
+  role,
 }: OrderGroupedViewProps) {
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set())
   // 'priority' | 'reserve' | 'override' | null
@@ -587,6 +606,8 @@ export function OrderGroupedView({
     )
   }
   function closePanel() { setOpenPanel(null) }
+
+  const canManagePlanning = role !== 'stock_operator' && role !== 'viewer' && role !== 'accountant'
 
   // Group rows by order_id
   const orderIds: string[] = []
@@ -732,12 +753,19 @@ export function OrderGroupedView({
                       label={priorityLabel}
                       hasOverride={hasOverride}
                       onClick={() => openInlinePanel(orderId, 'priority')}
+                      canManagePlanning={canManagePlanning}
                     />
                   </td>
 
                   {/* RESERVED */}
                   <td style={{ ...tdBase, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-                    {anyReserved ? (
+                    {!canManagePlanning ? (
+                      anyReserved ? (
+                        <span title="Has reserved stock" style={{ fontSize: '1rem', color: 'var(--warning)' }}>🔒</span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>—</span>
+                      )
+                    ) : anyReserved ? (
                       <button
                         onClick={() => openInlinePanel(orderId, 'reserve')}
                         style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '1rem', color: 'var(--warning)', padding: '0.1rem' }}
@@ -818,19 +846,20 @@ export function OrderGroupedView({
                         hasReservations={anyReserved}
                         onSetPriority={() => openInlinePanel(orderId, 'priority')}
                         onReserve={() => openInlinePanel(orderId, 'reserve')}
+                        canManagePlanning={canManagePlanning}
                       />
                     </div>
                   </td>
                 </tr>
 
                 {/* Inline panels */}
-                {isPriorityOpen && (
+                {canManagePlanning && isPriorityOpen && (
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: 0 }} />
                     <InlinePriorityForm orderId={orderId} onDone={closePanel} />
                   </tr>
                 )}
-                {isReserveOpen && (
+                {canManagePlanning && isReserveOpen && (
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: 0 }} />
                     <InlineReservePanel
