@@ -14,6 +14,7 @@ import type {
 export type MatrixGridProps = {
   data: MatrixGridData
   mode: 'view' | 'edit'
+  compactMobile?: boolean
   onCellChange?: (change: MatrixChangeEvent) => void
   highlightCell?: (row: MatrixRow, sizeId: string) => MatrixCellHighlight
   printTitle?: string
@@ -84,6 +85,7 @@ function fmt(n: number): string {
 export function MatrixGrid({
   data,
   mode,
+  compactMobile = false,
   onCellChange,
   highlightCell,
   printTitle,
@@ -212,9 +214,14 @@ export function MatrixGrid({
 
   // ── styles ────────────────────────────────────────────────
 
+  const designColumnWidth = compactMobile ? 78 : 100
+  const clrColumnWidth = compactMobile ? 40 : 48
+  const sizeColumnWidth = compactMobile ? 44 : 52
+  const cellHeight = compactMobile ? 34 : 40
+
   const tableStyle: CSSProperties = {
     borderCollapse: 'collapse',
-    fontSize: 'var(--text-sm)',
+    fontSize: compactMobile ? 'var(--text-xs)' : 'var(--text-sm)',
     width: '100%',
   }
 
@@ -222,11 +229,11 @@ export function MatrixGrid({
     background: 'var(--bg-elevated)',
     color: 'var(--accent-bright)',
     fontWeight: 700,
-    padding: '0.6rem 0.5rem',
+    padding: compactMobile ? '0.35rem 0.3rem' : '0.6rem 0.5rem',
     border: '1px solid var(--border)',
     textAlign: 'center',
     whiteSpace: 'nowrap',
-    fontSize: 'var(--text-xs)',
+    fontSize: compactMobile ? '0.7rem' : 'var(--text-xs)',
     letterSpacing: '0.05em',
     textTransform: 'uppercase',
     borderBottom: '2px solid var(--accent)',
@@ -238,7 +245,7 @@ export function MatrixGrid({
   const designThStyle: CSSProperties = {
     ...headerThStyle,
     textAlign: 'left',
-    minWidth: '100px',
+    minWidth: `${designColumnWidth}px`,
     borderRight: '2px solid var(--border-strong)',
     position: 'sticky',
     left: 0,
@@ -249,10 +256,10 @@ export function MatrixGrid({
 
   const clrThStyle: CSSProperties = {
     ...headerThStyle,
-    minWidth: '48px',
+    minWidth: `${clrColumnWidth}px`,
     borderRight: '1px solid var(--border-strong)',
     position: 'sticky',
-    left: 100,
+    left: designColumnWidth,
     top: 0,
     zIndex: 4,
     background: 'var(--bg-elevated)',
@@ -266,15 +273,15 @@ export function MatrixGrid({
     verticalAlign: 'top',
     whiteSpace: 'nowrap',
     color: 'var(--text-primary)',
-    minWidth: '100px',
-    fontSize: 'var(--text-sm)',
+    minWidth: `${designColumnWidth}px`,
+    fontSize: compactMobile ? 'var(--text-xs)' : 'var(--text-sm)',
     position: 'sticky',
     left: 0,
     zIndex: 2,
   }
 
   const clrCellStyleBase: CSSProperties = {
-    padding: '0.4rem 0.5rem',
+    padding: compactMobile ? '0.3rem 0.25rem' : '0.4rem 0.5rem',
     border: '1px solid var(--border)',
     borderRight: '1px solid var(--border-strong)',
     textAlign: 'center',
@@ -282,9 +289,9 @@ export function MatrixGrid({
     color: 'var(--text-secondary)',
     whiteSpace: 'nowrap',
     fontSize: 'var(--text-xs)',
-    minWidth: '48px',
+    minWidth: `${clrColumnWidth}px`,
     position: 'sticky',
-    left: 100,
+    left: designColumnWidth,
     zIndex: 2,
   }
 
@@ -292,8 +299,8 @@ export function MatrixGrid({
     border: '1px solid var(--border)',
     textAlign: 'center',
     fontVariantNumeric: 'tabular-nums',
-    minWidth: '52px',
-    height: '40px',
+    minWidth: `${sizeColumnWidth}px`,
+    height: `${cellHeight}px`,
     color: 'var(--text-primary)',
   }
 
@@ -303,7 +310,7 @@ export function MatrixGrid({
     border: 'none',
     background: 'transparent',
     textAlign: 'center',
-    fontSize: 'var(--text-base)',
+    fontSize: compactMobile ? 'var(--text-sm)' : 'var(--text-base)',
     outline: 'none',
     padding: '0 4px',
   }
@@ -343,7 +350,10 @@ export function MatrixGrid({
   // ── render ────────────────────────────────────────────────
 
   return (
-    <div className="matrix-print-root" style={{ position: 'relative', overflow: 'auto', maxHeight: '70vh' }}>
+    <div
+      className={`matrix-print-root${compactMobile ? ' matrix-grid-compact-mobile' : ''}`}
+      style={{ position: 'relative', overflow: 'auto', maxHeight: '70vh' }}
+    >
 
       {/* Draft banner */}
       {hasDraft && mode === 'edit' && (

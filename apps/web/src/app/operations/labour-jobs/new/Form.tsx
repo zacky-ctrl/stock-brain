@@ -167,7 +167,7 @@ export function CreateLabourJobForm({
   const linesPayload = view === 'matrix' ? matrixPayload : listPayload
 
   return (
-    <div>
+    <div className="labour-job-form">
       {state && 'error' in state && (
         <p style={{ ...msgError, marginBottom: '1rem' }}>✗ {state.error}</p>
       )}
@@ -179,7 +179,7 @@ export function CreateLabourJobForm({
           Job Details
         </h3>
 
-        <div style={{ marginBottom: '1.5rem' }}>
+        <div className="labour-job-details" style={{ marginBottom: '1.5rem' }}>
           <div style={{ ...fieldWrap, marginBottom: '0.5rem' }}>
             <label>Labour Unit</label>
             <select
@@ -196,7 +196,7 @@ export function CreateLabourJobForm({
             </select>
           </div>
 
-          <div style={headerGrid}>
+          <div className="labour-job-date-grid" style={headerGrid}>
             <div style={fieldWrap}>
               <label>Date Assigned</label>
               <input
@@ -232,7 +232,7 @@ export function CreateLabourJobForm({
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
+        <div className="labour-job-lines-header" style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem' }}>
           <h3 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, margin: 0, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Lines — Cut Stock Being Issued
           </h3>
@@ -253,7 +253,7 @@ export function CreateLabourJobForm({
               activeFilters={activeFilters}
               onFilterChange={setActiveFilters}
             />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', maxWidth: '440px', marginBottom: '0.75rem' }}>
+            <div className="labour-job-matrix-masters" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', maxWidth: '440px', marginBottom: '0.75rem' }}>
               <div style={fieldWrap}>
                 <label style={{ fontSize: 'var(--text-sm)' }}>Dabbi Colour (all cells)</label>
                 <select
@@ -286,12 +286,13 @@ export function CreateLabourJobForm({
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}>
               Enter quantities in gross. Leave cells blank or zero to skip.
             </p>
-            <div style={{ overflowX: 'auto' }}>
+            <div className="labour-job-matrix-wrap" style={{ overflowX: 'auto' }}>
               <MatrixGrid
                 data={emptyMatrixData!}
                 mode="edit"
                 onCellChange={handleMatrixCellChange}
                 draftKey="labour-job-new"
+                compactMobile
               />
             </div>
             {(!matrixDabbiId || !matrixBrandId) && (
@@ -304,14 +305,14 @@ export function CreateLabourJobForm({
 
         {/* ── List mode ─────────────────────────────────────────── */}
         {view === 'list' && lines.map((line, i) => (
-          <div key={i} style={lineBox}>
+          <div key={i} className="labour-job-line-card" style={lineBox}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
               <span style={{ ...smallLabel, color: 'var(--text-secondary)' }}>Line {i + 1}</span>
               {lines.length > 1 && (
                 <button type="button" onClick={() => removeLine(i)} style={removeBtn}>Remove</button>
               )}
             </div>
-            <div style={lineGrid}>
+            <div className="labour-job-line-grid" style={lineGrid}>
               <div style={fieldWrap}>
                 <label style={smallLabel}>Shape</label>
                 <select value={line.shape_design_id} onChange={(e) => updateLine(i, 'shape_design_id', e.target.value)} style={selectStyle}>
@@ -364,13 +365,13 @@ export function CreateLabourJobForm({
         ))}
 
         {view === 'list' && (
-          <button type="button" onClick={addLine} style={{ ...btnPrimary, marginTop: '0.25rem', marginBottom: '1.25rem', fontSize: 'var(--text-sm)' }}>
+          <button type="button" className="labour-job-add-line" onClick={addLine} style={{ ...btnPrimary, marginTop: '0.25rem', marginBottom: '1.25rem', fontSize: 'var(--text-sm)' }}>
             + Add Line
           </button>
         )}
 
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <button type="submit" disabled={isPending} style={{ ...btnPrimary, fontWeight: 'bold', marginTop: 0 }}>
+        <div className="labour-job-submit-row" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <button type="submit" className="labour-job-submit" disabled={isPending} style={{ ...btnPrimary, fontWeight: 'bold', marginTop: 0 }}>
             {isPending ? 'Saving…' : 'Issue Labour Job'}
           </button>
           <a href="/operations/labour-jobs" style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', textDecoration: 'none' }}>

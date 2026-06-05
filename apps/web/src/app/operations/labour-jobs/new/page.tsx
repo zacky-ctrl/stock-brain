@@ -54,7 +54,7 @@ export default async function NewLabourJobPage() {
   }))
 
   return (
-    <main style={{ padding: '1.5rem 2rem', maxWidth: '900px' }}>
+    <main className="labour-job-new-page" style={{ padding: '1.5rem 2rem', maxWidth: '900px' }}>
       <PageHeader
         title="Issue Labour Job"
         backHref="/operations/labour-jobs"

@@ -370,6 +370,264 @@ a {
   box-shadow: var(--shadow-md);
 }
 
+/* ── Labour jobs responsive views ───────────────────────────── */
+
+.labour-jobs-card-list {
+  display: none;
+}
+
+.labour-job-card {
+  display: block;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.85rem;
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.labour-job-card-top,
+.labour-job-lines-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.labour-job-card-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.1rem;
+}
+
+.labour-job-card-id {
+  color: var(--accent-bright);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.labour-job-card-unit {
+  margin-top: 0.65rem;
+  font-size: var(--text-base);
+  font-weight: 650;
+}
+
+.labour-job-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.labour-job-card-grid div {
+  min-width: 0;
+}
+
+.labour-job-card-grid span {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+
+.labour-job-card-grid strong {
+  display: block;
+  margin-top: 0.08rem;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.labour-job-card-notes {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+@media (max-width: 767px) {
+  .labour-jobs-page,
+  .labour-job-new-page {
+    padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom, 0)) !important;
+    max-width: none !important;
+    overflow-x: hidden;
+  }
+
+  .labour-jobs-page h1,
+  .labour-job-new-page h1 {
+    font-size: 2rem !important;
+    line-height: 1.1 !important;
+  }
+
+  .labour-jobs-page [href="/operations/labour-jobs/new"] button {
+    min-height: 44px;
+    padding-inline: 1rem !important;
+    white-space: nowrap;
+  }
+
+  .labour-jobs-filter {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem !important;
+    padding: 0.75rem !important;
+    margin-bottom: 0.85rem !important;
+    border-radius: var(--radius-md) !important;
+  }
+
+  .labour-jobs-filter-field {
+    min-width: 0;
+  }
+
+  .labour-jobs-filter-field:first-child,
+  .labour-jobs-filter-field:last-of-type,
+  .labour-jobs-clear,
+  .labour-jobs-filter-count {
+    grid-column: 1 / -1;
+  }
+
+  .labour-jobs-filter select,
+  .labour-jobs-filter input {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 40px;
+    font-size: var(--text-sm) !important;
+  }
+
+  .labour-jobs-clear {
+    align-self: stretch !important;
+    min-height: 38px;
+  }
+
+  .labour-jobs-filter-count {
+    align-self: start !important;
+    padding-bottom: 0 !important;
+  }
+
+  .labour-jobs-table-card {
+    display: none;
+  }
+
+  .labour-jobs-card-list {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .labour-job-form {
+    overflow-x: hidden;
+  }
+
+  .labour-job-details {
+    margin-bottom: 1.15rem !important;
+  }
+
+  .labour-job-date-grid,
+  .labour-job-matrix-masters {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+    max-width: none !important;
+  }
+
+  .labour-job-form input,
+  .labour-job-form select {
+    min-height: 42px;
+    font-size: var(--text-sm) !important;
+  }
+
+  .labour-job-lines-header {
+    align-items: center !important;
+    margin-top: 1rem;
+  }
+
+  .labour-job-lines-header h3 {
+    font-size: var(--text-xs) !important;
+    line-height: 1.35;
+    max-width: 58%;
+  }
+
+  .labour-job-line-card {
+    padding: 0.8rem !important;
+    border-radius: var(--radius-md) !important;
+    margin-bottom: 0.75rem !important;
+  }
+
+  .labour-job-line-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.65rem !important;
+  }
+
+  .labour-job-line-grid > div {
+    min-width: 0;
+  }
+
+  .labour-job-line-grid > div:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .labour-job-add-line,
+  .labour-job-submit {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .labour-job-submit-row {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+
+  .labour-job-submit-row a {
+    text-align: center;
+    padding: 0.4rem 0;
+  }
+
+  .labour-job-matrix-wrap {
+    margin-left: -1rem;
+    margin-right: -1rem;
+    padding: 0 1rem;
+    overflow-x: auto !important;
+  }
+
+  .matrix-grid-compact-mobile {
+    max-height: 58vh !important;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+
+  .matrix-grid-compact-mobile table {
+    font-size: var(--text-xs) !important;
+  }
+
+  .matrix-grid-compact-mobile th,
+  .matrix-grid-compact-mobile td {
+    min-width: 44px !important;
+    height: 34px !important;
+    padding: 0.3rem 0.35rem !important;
+    font-size: 0.72rem !important;
+  }
+
+  .matrix-grid-compact-mobile th:first-child,
+  .matrix-grid-compact-mobile td:first-child {
+    min-width: 78px !important;
+    max-width: 78px;
+    white-space: normal !important;
+  }
+
+  .matrix-grid-compact-mobile input {
+    font-size: var(--text-sm) !important;
+    min-height: 34px;
+  }
+}
+
 /* ── Scrollbar ───────────────────────────────────────────────── */
 
 ::-webkit-scrollbar {

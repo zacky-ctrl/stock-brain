@@ -23,6 +23,15 @@ function fmt(n: number): string {
   return n % 1 === 0 ? String(n) : n.toFixed(3)
 }
 
+function dateLabel(date: string | null | undefined): string {
+  if (!date) return '—'
+  return new Date(`${date}T00:00:00`).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
 function luFrom(job: JobRow) {
   return Array.isArray(job.labour_units) ? (job.labour_units as JobRow['labour_units'][])[0] : job.labour_units
 }
@@ -84,6 +93,75 @@ const filterGroupStyle: CSSProperties = {
   gap: '0.2rem',
 }
 
+type JobTotals = {
+  lineCount: number
+  totalSent: number
+  totalReturned: number
+  wip: number
+}
+
+function jobTotals(job: JobRow): JobTotals {
+  const lines = job.labour_job_lines ?? []
+  const totalSent = lines.reduce((s, l) => s + Number(l.quantity_sent_gross), 0)
+  const totalReturned = lines.reduce((s, l) => s + Number(l.quantity_returned_gross), 0)
+  return {
+    lineCount: lines.length,
+    totalSent,
+    totalReturned,
+    wip: Math.max(0, totalSent - totalReturned),
+  }
+}
+
+function JobCard({ job }: { job: JobRow }) {
+  const lu = luFrom(job)
+  const totals = jobTotals(job)
+
+  return (
+    <Link href={`/operations/labour-jobs/${job.id}`} className="labour-job-card">
+      <div className="labour-job-card-top">
+        <div>
+          <div className="labour-job-card-label">Job ID</div>
+          <div className="labour-job-card-id">{job.id.slice(0, 8)}</div>
+        </div>
+        <Badge variant={jobBadgeVariant(job)} label={jobBadgeLabel(job)} size="sm" />
+      </div>
+
+      <div className="labour-job-card-unit">
+        {lu ? `#${lu.serial_number} ${lu.name}` : 'No labour unit'}
+      </div>
+
+      <div className="labour-job-card-grid">
+        <div>
+          <span>Assigned</span>
+          <strong>{dateLabel(job.date_assigned)}</strong>
+        </div>
+        <div>
+          <span>Expected</span>
+          <strong>{dateLabel(job.expected_return_date)}</strong>
+        </div>
+        <div>
+          <span>Lines</span>
+          <strong>{totals.lineCount}</strong>
+        </div>
+        <div>
+          <span>Sent</span>
+          <strong>{fmt(totals.totalSent)}</strong>
+        </div>
+        <div>
+          <span>Returned</span>
+          <strong>{fmt(totals.totalReturned)}</strong>
+        </div>
+        <div>
+          <span>WIP</span>
+          <strong>{fmt(totals.wip)}</strong>
+        </div>
+      </div>
+
+      {job.notes && <div className="labour-job-card-notes">{job.notes}</div>}
+    </Link>
+  )
+}
+
 export function LabourJobsClient({ jobs }: { jobs: JobRow[] }) {
   const [unitFilter, setUnitFilter]       = useState('')
   const [assignedFrom, setAssignedFrom]   = useState('')
@@ -132,8 +210,8 @@ export function LabourJobsClient({ jobs }: { jobs: JobRow[] }) {
   return (
     <>
       {/* Filter bar */}
-      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '1rem', padding: '0.75rem 1rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
-        <div style={filterGroupStyle}>
+      <div className="labour-jobs-filter" style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '1rem', padding: '0.75rem 1rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
+        <div className="labour-jobs-filter-field" style={filterGroupStyle}>
           <label style={filterLabelStyle}>Labour Unit</label>
           <select
             value={unitFilter}
@@ -149,7 +227,7 @@ export function LabourJobsClient({ jobs }: { jobs: JobRow[] }) {
           </select>
         </div>
 
-        <div style={filterGroupStyle}>
+        <div className="labour-jobs-filter-field" style={filterGroupStyle}>
           <label style={filterLabelStyle}>Assigned from</label>
           <input
             type="date"
@@ -159,7 +237,7 @@ export function LabourJobsClient({ jobs }: { jobs: JobRow[] }) {
           />
         </div>
 
-        <div style={filterGroupStyle}>
+        <div className="labour-jobs-filter-field" style={filterGroupStyle}>
           <label style={filterLabelStyle}>Due by</label>
           <input
             type="date"
@@ -169,7 +247,7 @@ export function LabourJobsClient({ jobs }: { jobs: JobRow[] }) {
           />
         </div>
 
-        <div style={filterGroupStyle}>
+        <div className="labour-jobs-filter-field" style={filterGroupStyle}>
           <label style={filterLabelStyle}>Status</label>
           <select
             value={statusFilter}
@@ -185,6 +263,8 @@ export function LabourJobsClient({ jobs }: { jobs: JobRow[] }) {
 
         {anyFilter && (
           <button
+            type="button"
+            className="labour-jobs-clear"
             onClick={clearAll}
             style={{
               padding: '0.3rem 0.75rem',
@@ -202,7 +282,7 @@ export function LabourJobsClient({ jobs }: { jobs: JobRow[] }) {
         )}
 
         {anyFilter && (
-          <span style={{ alignSelf: 'flex-end', fontSize: 'var(--text-xs)', color: 'var(--text-muted)', paddingBottom: '0.35rem' }}>
+          <span className="labour-jobs-filter-count" style={{ alignSelf: 'flex-end', fontSize: 'var(--text-xs)', color: 'var(--text-muted)', paddingBottom: '0.35rem' }}>
             {filtered.length} of {jobs.length}
           </span>
         )}
@@ -213,7 +293,14 @@ export function LabourJobsClient({ jobs }: { jobs: JobRow[] }) {
           No jobs match the current filters.
         </p>
       ) : (
-        <div className="table-card">
+        <>
+        <div className="labour-jobs-card-list">
+          {filtered.map((job) => (
+            <JobCard key={job.id} job={job} />
+          ))}
+        </div>
+
+        <div className="table-card labour-jobs-table-card">
           <table className="stock-table">
             <thead>
               <tr>
@@ -231,10 +318,7 @@ export function LabourJobsClient({ jobs }: { jobs: JobRow[] }) {
             <tbody>
               {filtered.map((job) => {
                 const lu = luFrom(job)
-                const lines = job.labour_job_lines ?? []
-                const totalSent     = lines.reduce((s, l) => s + Number(l.quantity_sent_gross), 0)
-                const totalReturned = lines.reduce((s, l) => s + Number(l.quantity_returned_gross), 0)
-                const wip = Math.max(0, totalSent - totalReturned)
+                const totals = jobTotals(job)
 
                 return (
                   <tr key={job.id}>
@@ -247,18 +331,18 @@ export function LabourJobsClient({ jobs }: { jobs: JobRow[] }) {
                       </Link>
                     </td>
                     <td style={tableTd}>{lu ? `#${lu.serial_number} ${lu.name}` : '—'}</td>
-                    <td style={tableTd}>{job.date_assigned}</td>
+                    <td style={tableTd}>{dateLabel(job.date_assigned)}</td>
                     <td style={{ ...tableTd, color: job.expected_return_date ? undefined : 'var(--text-secondary)' }}>
-                      {job.expected_return_date ?? '—'}
+                      {dateLabel(job.expected_return_date)}
                     </td>
                     <td style={tableTd}>
                       <Badge variant={jobBadgeVariant(job)} label={jobBadgeLabel(job)} size="sm" />
                     </td>
-                    <td style={tdNum}>{lines.length}</td>
-                    <td style={tdNum}>{fmt(totalSent)}</td>
-                    <td style={tdNum}>{fmt(totalReturned)}</td>
-                    <td style={{ ...tdNum, fontWeight: wip > 0 ? 'bold' : undefined }}>
-                      {fmt(wip)}
+                    <td style={tdNum}>{totals.lineCount}</td>
+                    <td style={tdNum}>{fmt(totals.totalSent)}</td>
+                    <td style={tdNum}>{fmt(totals.totalReturned)}</td>
+                    <td style={{ ...tdNum, fontWeight: totals.wip > 0 ? 'bold' : undefined }}>
+                      {fmt(totals.wip)}
                     </td>
                   </tr>
                 )
@@ -266,6 +350,7 @@ export function LabourJobsClient({ jobs }: { jobs: JobRow[] }) {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </>
   )

@@ -21,7 +21,7 @@ export default async function LabourJobsPage() {
   const jobs = (data ?? []) as unknown as JobRow[]
 
   return (
-    <main style={{ padding: '1.5rem 2rem' }}>
+    <main className="labour-jobs-page" style={{ padding: '1.5rem 2rem' }}>
       <PageHeader
         title="Labour Jobs"
         actions={
