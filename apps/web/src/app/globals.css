@@ -407,6 +407,197 @@ a {
   gap: 0.2rem;
 }
 
+/* ── Orders card view ───────────────────────────────────────── */
+
+.orders-filter-shell {
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.orders-filter-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.orders-filter-toggle,
+.orders-clear-button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.orders-filter-toggle:hover,
+.orders-clear-button:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.orders-filter-toggle strong {
+  min-width: 1.35rem;
+  height: 1.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+  font-size: 0.7rem;
+}
+
+.orders-filter-count {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  margin-left: auto;
+}
+
+.orders-clear-button {
+  background: transparent;
+}
+
+.orders-filter-grid {
+  margin-bottom: 0;
+}
+
+.orders-card-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.order-card {
+  position: relative;
+  min-width: 0;
+  display: block;
+  padding: 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.order-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.order-card-top,
+.order-card-head-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.order-card-top {
+  justify-content: space-between;
+}
+
+.order-card-head-actions {
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.order-card-menu-wrap {
+  position: relative;
+}
+
+.order-card-menu-button {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.order-card-menu-button:hover,
+.order-card-menu-button[aria-expanded='true'] {
+  border-color: var(--accent);
+  color: var(--accent-bright);
+  background: var(--accent-subtle);
+}
+
+.order-card-menu-panel {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 30;
+  min-width: 180px;
+  padding: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+}
+
+.order-card-menu-panel a,
+.order-card-menu-panel button {
+  width: 100%;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0.45rem 0.55rem;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.order-card-menu-panel a:hover,
+.order-card-menu-panel button:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.order-card-progress {
+  height: 4px;
+  margin-top: 0.75rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.order-card-progress > div {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--success);
+  transition: width 260ms ease;
+}
+
+.order-card-empty {
+  grid-column: 1 / -1;
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
 /* ── Dashboard command center ───────────────────────────────── */
 
 .dashboard-page {
@@ -783,6 +974,43 @@ a {
 
   .responsive-filter-bar button {
     min-height: 38px;
+  }
+
+  .orders-filter-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .orders-filter-count {
+    grid-column: 1 / -1;
+    margin-left: 0;
+    order: 3;
+  }
+
+  .orders-filter-toggle {
+    justify-content: flex-start;
+  }
+
+  .orders-card-list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+
+  .order-card {
+    padding: 0.85rem;
+  }
+
+  .order-card-top {
+    gap: 0.5rem;
+  }
+
+  .order-card-head-actions {
+    gap: 0.4rem;
+  }
+
+  .order-card-menu-panel {
+    min-width: 170px;
   }
 
   .desktop-table-card {
