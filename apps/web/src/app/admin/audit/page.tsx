@@ -41,7 +41,7 @@ function fmtTs(ts: string): string {
 
 function actorDisplay(id: string | null, email: string | null): string {
   if (email) return email
-  if (id)    return id.slice(0, 8)
+  if (id)    return 'Unknown user'
   return '—'
 }
 
@@ -50,11 +50,11 @@ export default async function AuditTrailPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const params    = await searchParams
-  const dateFrom  = typeof params.dateFrom  === 'string' ? params.dateFrom  : ''
-  const dateTo    = typeof params.dateTo    === 'string' ? params.dateTo    : ''
-  const eventType = typeof params.eventType === 'string' ? params.eventType : ''
-  const userId    = typeof params.userId    === 'string' ? params.userId    : ''
+  const params      = await searchParams
+  const dateFrom    = typeof params.dateFrom   === 'string' ? params.dateFrom   : ''
+  const dateTo      = typeof params.dateTo     === 'string' ? params.dateTo     : ''
+  const eventType   = typeof params.eventType  === 'string' ? params.eventType  : ''
+  const userFilter  = typeof params.userFilter === 'string' ? params.userFilter : ''
 
   const supabase = createServerSupabaseClient()
 
@@ -67,6 +67,7 @@ export default async function AuditTrailPage({
     labourHistoryRes,
     cuttingSessionsRes,
     velvetReceiptsRes,
+    usersRes,
   ] = await Promise.all([
     supabase
       .from('stock_corrections')
@@ -117,10 +118,19 @@ export default async function AuditTrailPage({
       .select('id, created_at, created_by, receipt_date, bundles_received, supplier, bindi_colour_id, bindi_colours(code)')
       .order('created_at', { ascending: false })
       .limit(500),
+
+    supabase
+      .from('users')
+      .select('id, email')
+      .order('email'),
   ])
 
-  // user_roles has email only — no UUID mapping available; actor displays fall back to UUID slice
   const userMap = new Map<string, string>()
+  for (const user of (usersRes.data ?? [])) {
+    if (user.id && user.email) {
+      userMap.set(user.id as string, user.email as string)
+    }
+  }
 
   function resolveActor(id: string | null | undefined): { id: string | null; email: string | null } {
     if (!id) return { id: null, email: null }
@@ -302,14 +312,19 @@ export default async function AuditTrailPage({
   if (eventType && eventType !== 'all') {
     filtered = filtered.filter((e) => e.category === eventType)
   }
-  if (userId) {
-    filtered = filtered.filter(
-      (e) => e.actor_id === userId || (e.actor_email ?? '').includes(userId),
-    )
+  if (userFilter) {
+    filtered = filtered.filter((e) => e.actor_email === userFilter)
   }
 
-  const shown     = filtered.slice(0, 200)
-  const hasFilters = dateFrom || dateTo || (eventType && eventType !== 'all') || userId
+  const userFilterOptions = Array.from(
+    new Set([
+      ...(usersRes.data ?? []).map((user) => user.email as string | null),
+      ...events.map((event) => event.actor_email),
+    ].filter((email): email is string => !!email)),
+  ).sort()
+
+  const shown      = filtered.slice(0, 500)
+  const hasFilters = dateFrom || dateTo || (eventType && eventType !== 'all') || userFilter
 
   const tdBase: CSSProperties = { ...tableTd, verticalAlign: 'top' }
   const thBase: CSSProperties = tableTh
@@ -379,6 +394,22 @@ export default async function AuditTrailPage({
           </select>
         </div>
 
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontWeight: 600 }}>
+            User
+          </label>
+          <select
+            name="userFilter"
+            defaultValue={userFilter || ''}
+            style={{ ...selectStyle, width: '200px' }}
+          >
+            <option value="">All users</option>
+            {userFilterOptions.map((email) => (
+              <option key={email} value={email}>{email}</option>
+            ))}
+          </select>
+        </div>
+
         <button
           type="submit"
           style={{
@@ -413,7 +444,7 @@ export default async function AuditTrailPage({
 
       <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
         {shown.length} event{shown.length !== 1 ? 's' : ''} shown
-        {filtered.length > 200 && ` (limited to 200 of ${filtered.length})`}
+        {filtered.length > 500 && ` (showing 500 of ${filtered.length})`}
       </p>
 
       {shown.length === 0 ? (
@@ -429,7 +460,7 @@ export default async function AuditTrailPage({
                 <th style={thBase}>Category</th>
                 <th style={thBase}>Event</th>
                 <th style={thBase}>Summary / Detail</th>
-                <th style={thBase}>Actor</th>
+                <th style={thBase}>Head User</th>
               </tr>
             </thead>
             <tbody>
