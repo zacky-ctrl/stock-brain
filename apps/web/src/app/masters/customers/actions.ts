@@ -10,13 +10,12 @@ export async function addCustomer(
 ): Promise<ActionState> {
   const name = (formData.get('name') as string ?? '').trim()
   const brandRule = formData.get('brand_rule') as string
-  const priorityWeight = parseInt(formData.get('priority_weight') as string ?? '5', 10)
   const paymentRiskFlag = formData.get('payment_risk_flag') === 'on'
   const entityName = (formData.get('entity_name') as string ?? '').trim() || null
   const address = (formData.get('address') as string ?? '').trim() || null
   const phoneNumber = (formData.get('phone_number') as string ?? '').trim() || null
   const transportName = (formData.get('transport_name') as string ?? '').trim() || null
-  const rateGroup = (formData.get('rate_group') as string ?? '').trim() || null
+  const defaultDabbiColourId = (formData.get('default_dabbi_colour_id') as string ?? '').trim() || null
   const yellowRateRaw = (formData.get('yellow_rate_per_gross') as string ?? '').trim()
   const whiteRateRaw = (formData.get('white_rate_per_gross') as string ?? '').trim()
 
@@ -26,7 +25,6 @@ export async function addCustomer(
   const validRules = ['no_preference', 'prefer_nirankari', 'prefer_suhela', 'strict_nirankari', 'strict_suhela']
   if (!validRules.includes(brandRule)) return { error: 'Invalid brand rule' }
 
-  const weight = isNaN(priorityWeight) ? 5 : Math.min(10, Math.max(1, priorityWeight))
   const yellowRate = yellowRateRaw ? Number(yellowRateRaw) : null
   const whiteRate = whiteRateRaw ? Number(whiteRateRaw) : null
   if (yellowRate !== null && !Number.isFinite(yellowRate)) return { error: 'Yellow rate is invalid' }
@@ -40,11 +38,11 @@ export async function addCustomer(
       address,
       phone_number: phoneNumber,
       transport_name: transportName,
-      rate_group: rateGroup,
+      default_dabbi_colour_id: defaultDabbiColourId,
       yellow_rate_per_gross: yellowRate,
       white_rate_per_gross: whiteRate,
       brand_rule: brandRule,
-      priority_weight: weight,
+      priority_weight: 5,
       payment_risk_flag: paymentRiskFlag,
     })
     if (error) return { error: error.message }

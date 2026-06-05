@@ -598,6 +598,166 @@ a {
   font-size: var(--text-sm);
 }
 
+/* ── Customer master cards ──────────────────────────────────── */
+
+.customer-card-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 0.9rem;
+  align-items: start;
+  margin-bottom: 1.5rem;
+}
+
+.customer-card {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.customer-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.customer-card-top,
+.customer-card-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.customer-card-top {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.customer-card-top h2 {
+  margin: 0;
+  color: var(--accent-bright);
+  font-size: 1.15rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.customer-card-top p {
+  margin: 0.25rem 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.customer-card-actions {
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.customer-card-actions button,
+.customer-edit-actions button {
+  min-height: 36px;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.customer-card-actions button:hover,
+.customer-edit-actions button:hover {
+  border-color: var(--accent);
+  color: var(--accent-bright);
+}
+
+.customer-card-main,
+.customer-card-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.9rem;
+}
+
+.customer-card-main > div,
+.customer-card-details > div {
+  min-width: 0;
+  padding: 0.65rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.customer-card-main span,
+.customer-card-details span,
+.customer-edit-grid label span {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.customer-card-main strong,
+.customer-card-details strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.customer-card-details {
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.customer-card-details > div:first-child,
+.customer-card-details > div:nth-child(3) {
+  grid-column: 1 / -1;
+}
+
+.customer-edit-panel {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle);
+  cursor: default;
+}
+
+.customer-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.customer-edit-grid label {
+  min-width: 0;
+}
+
+.customer-edit-wide {
+  grid-column: span 2;
+}
+
+.customer-edit-actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  margin-top: 0.9rem;
+}
+
+.customer-edit-actions button:first-child {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
+
 /* ── Dashboard command center ───────────────────────────────── */
 
 .dashboard-page {
@@ -1011,6 +1171,36 @@ a {
 
   .order-card-menu-panel {
     min-width: 170px;
+  }
+
+  .customer-card-list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+
+  .customer-card {
+    padding: 0.85rem;
+  }
+
+  .customer-card-top {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .customer-card-actions {
+    justify-content: flex-start;
+  }
+
+  .customer-card-main,
+  .customer-card-details,
+  .customer-edit-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .customer-edit-wide,
+  .customer-card-details > div:first-child,
+  .customer-card-details > div:nth-child(3) {
+    grid-column: auto;
   }
 
   .desktop-table-card {

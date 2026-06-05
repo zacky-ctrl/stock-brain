@@ -12,7 +12,11 @@ import type { SizeMasterRow, DesignMasterRow, ColourMasterRow } from '@stock-bra
 import type { MatrixGridData, MatrixChangeEvent, FilterConfig, ActiveFilters } from '@stock-brain/types'
 import { MatrixFilterBar } from '@/components/matrix/MatrixFilterBar'
 
-export type MasterOption = { id: string; label: string }
+export type MasterOption = {
+  id: string
+  label: string
+  defaultDabbiColourId?: string | null
+}
 
 // Additional master data types for matrix mode
 export type SizeMaster = SizeMasterRow
@@ -39,11 +43,11 @@ type LineState = {
   ordered_qty: string
 }
 
-const emptyLine = (): LineState => ({
+const emptyLine = (dabbiColourId = ''): LineState => ({
   shape_design_id: '',
   bindi_colour_id: '',
   size_id: '',
-  dabbi_colour_id: '',
+  dabbi_colour_id: dabbiColourId,
   ordered_qty: '',
 })
 
@@ -131,11 +135,24 @@ export function CreateOrderForm({
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({})
   const [matrixChanges, setMatrixChanges] = useState<MatrixChangeEvent[]>([])
 
-  const addLine = () => setLines((prev) => [...prev, emptyLine()])
+  const selectedCustomerDefaultDabbi = customers.find((customer) => customer.id === customerId)?.defaultDabbiColourId ?? ''
+
+  const addLine = () => setLines((prev) => [...prev, emptyLine(selectedCustomerDefaultDabbi)])
   const removeLine = (i: number) => setLines((prev) => prev.filter((_, idx) => idx !== i))
 
   const updateLine = (i: number, field: keyof LineState, value: string) =>
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)))
+
+  const handleCustomerChange = (nextCustomerId: string) => {
+    const defaultDabbiColourId = customers.find((customer) => customer.id === nextCustomerId)?.defaultDabbiColourId ?? ''
+    setCustomerId(nextCustomerId)
+    if (!defaultDabbiColourId) return
+    setMatrixDabbiId(defaultDabbiColourId)
+    setLines((prev) => prev.map((line) => ({
+      ...line,
+      dabbi_colour_id: line.dabbi_colour_id || defaultDabbiColourId,
+    })))
+  }
 
   const handleMatrixCellChange = useCallback((change: MatrixChangeEvent) => {
     setMatrixChanges((prev) => {
@@ -227,7 +244,7 @@ export function CreateOrderForm({
               style={selectStyle}
               required
               value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
+              onChange={(e) => handleCustomerChange(e.target.value)}
             >
               <option value="">Select customer…</option>
               {customers.map((c) => (

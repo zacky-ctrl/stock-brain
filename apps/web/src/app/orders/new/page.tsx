@@ -9,7 +9,7 @@ export default async function NewOrderPage() {
   const [customers, shapes, bindiColours, sizes, dabbiColours] = await Promise.all([
     supabase
       .from('customers')
-      .select('id, name')
+      .select('id, name, default_dabbi_colour_id')
       .eq('is_active', true)
       .order('name'),
     supabase
@@ -35,13 +35,14 @@ export default async function NewOrderPage() {
       .order('code'),
   ])
 
-  const toOption = (row: { id: string; label: string }): MasterOption => ({
+  const toOption = (row: { id: string; label: string; defaultDabbiColourId?: string | null }): MasterOption => ({
     id: row.id,
     label: row.label,
+    defaultDabbiColourId: row.defaultDabbiColourId ?? null,
   })
 
   const customerOptions: MasterOption[] = (customers.data ?? []).map((c) =>
-    toOption({ id: c.id, label: c.name }),
+    toOption({ id: c.id, label: c.name, defaultDabbiColourId: c.default_dabbi_colour_id }),
   )
   const shapeOptions: MasterOption[] = (shapes.data ?? []).map((s) =>
     toOption({ id: s.id, label: s.name }),

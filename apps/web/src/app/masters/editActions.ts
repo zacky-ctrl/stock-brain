@@ -75,8 +75,6 @@ export async function updateDabbiColour(_prev: ActionState, fd: FormData): Promi
 export async function updateCustomer(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const id = fd.get('id') as string
   if (!id) return { error: 'ID missing' }
-  const priorityRaw = fd.get('priority_weight') as string
-  const priority = parseFloat(priorityRaw)
   const yellowRateRaw = (fd.get('yellow_rate_per_gross') as string ?? '').trim()
   const whiteRateRaw = (fd.get('white_rate_per_gross') as string ?? '').trim()
   const yellowRate = yellowRateRaw ? Number(yellowRateRaw) : null
@@ -89,10 +87,11 @@ export async function updateCustomer(_prev: ActionState, fd: FormData): Promise<
     address: (fd.get('address') as string) || null,
     phone_number: (fd.get('phone_number') as string) || null,
     transport_name: (fd.get('transport_name') as string) || null,
-    rate_group: (fd.get('rate_group') as string) || null,
+    default_dabbi_colour_id: (fd.get('default_dabbi_colour_id') as string) || null,
     yellow_rate_per_gross: yellowRate,
     white_rate_per_gross: whiteRate,
-    priority_weight: Number.isFinite(priority) ? priority : 1,
+    brand_rule: (fd.get('brand_rule') as string) || 'no_preference',
+    payment_risk_flag: fd.get('payment_risk_flag') === 'true',
     notes: (fd.get('notes') as string) || null,
     is_active: fd.get('is_active') === 'true',
   }, ['/masters/customers', '/planning/allocation'])
