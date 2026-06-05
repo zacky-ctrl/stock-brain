@@ -5,7 +5,12 @@ import { assignUserRoleAction } from './actions'
 import { fieldWrap, inputStyle, selectStyle, btnPrimary, msgError, msgOk } from '@/lib/ui'
 import type { ActionState } from '@/lib/masters'
 
-export function AssignUserForm() {
+type Props = {
+  defaultEmail?: string
+  compact?: boolean
+}
+
+export function AssignUserForm({ defaultEmail, compact = false }: Props) {
   const [state, formAction, isPending] = useActionState<ActionState, FormData>(
     assignUserRoleAction,
     null,
@@ -20,23 +25,29 @@ export function AssignUserForm() {
         <p style={{ ...msgOk, width: '100%', marginBottom: 0 }}>✓ {state.success}</p>
       )}
 
-      <div style={{ ...fieldWrap, flex: '1', minWidth: '220px' }}>
-        <label style={{ fontSize: 'var(--text-sm)' }}>Email</label>
-        <input
-          name="email"
-          type="email"
-          required
-          placeholder="user@example.com"
-          style={{ ...inputStyle, minHeight: '40px' }}
-        />
-      </div>
+      {compact ? (
+        <input type="hidden" name="email" value={defaultEmail ?? ''} />
+      ) : (
+        <div style={{ ...fieldWrap, flex: '1', minWidth: '220px' }}>
+          <label style={{ fontSize: 'var(--text-sm)' }}>Email</label>
+          <input
+            name="email"
+            type="email"
+            required
+            placeholder="user@example.com"
+            defaultValue={defaultEmail}
+            style={{ ...inputStyle, minHeight: '40px' }}
+          />
+        </div>
+      )}
 
       <div style={{ ...fieldWrap, width: '140px' }}>
-        <label style={{ fontSize: 'var(--text-sm)' }}>Role</label>
-        <select name="role" style={{ ...selectStyle, minHeight: '40px' }} defaultValue="viewer">
-          <option value="viewer">viewer</option>
-          <option value="manager">manager</option>
-          <option value="admin">admin</option>
+        <label style={{ fontSize: 'var(--text-sm)' }}>{compact ? 'Assign Role' : 'Role'}</label>
+        <select name="role" style={{ ...selectStyle, minHeight: '40px' }} defaultValue="stock_operator">
+          <option value="stock_operator">Stock Operator</option>
+          <option value="manager">Manager</option>
+          <option value="admin">Admin</option>
+          <option value="accountant">Accountant</option>
         </select>
       </div>
 

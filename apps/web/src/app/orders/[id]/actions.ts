@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import { amendOrderLine, amendOrderHeader } from '@stock-brain/domain'
 import { createSupabaseAmendmentStore } from '@/lib/amendment-store'
 import type { ActionState } from '@/lib/masters'
@@ -67,7 +68,7 @@ export async function closeOrderAction(params: {
   if (!orderId || !reason.trim()) return { error: 'Order ID and reason are required' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const now = new Date().toISOString()
 
   // 1. Fetch open / partially-dispatched lines
@@ -221,7 +222,7 @@ export async function amendOrderLineAction(
   }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const store = createSupabaseAmendmentStore(supabase)
 
   const result = await amendOrderLine(
@@ -263,7 +264,7 @@ export async function amendOrderHeaderAction(
   if (!reason) return { error: 'Reason is required for amendments' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
 
   const store: OrderHeaderAmendmentStore = {
     async getOrder(id) {
@@ -346,7 +347,7 @@ export async function addOrderLineAction(
   }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
 
   // Get order to validate it exists and get customer for brand snapshot
   const { data: order } = await supabase

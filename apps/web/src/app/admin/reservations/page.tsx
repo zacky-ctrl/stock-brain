@@ -267,8 +267,6 @@ export default async function ReservationsPage({
                       {new Date(alloc.allocated_at as string).toLocaleString()}
                     </td>
                     <td style={{ ...tdStyle, color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
-                      {/* In pre-auth mode this shows the DEV_ACTOR_ID UUID.
-                          Phase 3 will show a real user name once auth is live. */}
                       {(alloc.allocated_by as string | null)?.slice(0, 8) ?? '—'}
                     </td>
                     <td style={tdStyle}>

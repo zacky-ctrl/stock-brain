@@ -2,9 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import type { ActionState } from '@/lib/masters'
-
-const ACTOR = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
 
 type MatrixLine = {
   shape_design_id: string
@@ -36,6 +35,7 @@ export async function applyCuttingsOpeningStock(
   if (nonZero.length === 0) return { error: 'No non-zero quantities entered.' }
 
   const supabase = createServerSupabaseClient()
+  const actor = await getActorId()
   const now = new Date().toISOString()
   const fullReason = `OPENING_BALANCE: ${reason}`
   const warnings: string[] = []
@@ -64,7 +64,7 @@ export async function applyCuttingsOpeningStock(
     // Write correction audit record before balance change
     const { error: corrErr } = existing
       ? await supabase.from('stock_corrections').insert({
-          corrected_by: ACTOR,
+          corrected_by: actor,
           stock_stage: 'cuttings',
           entity_table: 'cuttings_stock_balance',
           entity_id: existing.id,
@@ -101,7 +101,7 @@ export async function applyCuttingsOpeningStock(
       entityId = inserted.id
       // Write correction after insert (we now have entity_id)
       await supabase.from('stock_corrections').insert({
-        corrected_by: ACTOR,
+        corrected_by: actor,
         stock_stage: 'cuttings',
         entity_table: 'cuttings_stock_balance',
         entity_id: entityId,
@@ -154,6 +154,7 @@ export async function applyPurchasedCuttingsStock(
   const fullReason = parts.join(' | ')
 
   const supabase = createServerSupabaseClient()
+  const actor = await getActorId()
   const now = new Date().toISOString()
 
   await Promise.all(nonZero.map(async (line) => {
@@ -171,7 +172,7 @@ export async function applyPurchasedCuttingsStock(
 
     if (existing) {
       const { error: corrErr } = await supabase.from('stock_corrections').insert({
-        corrected_by: ACTOR,
+        corrected_by: actor,
         stock_stage: 'cuttings',
         entity_table: 'cuttings_stock_balance',
         entity_id: existing.id,
@@ -203,7 +204,7 @@ export async function applyPurchasedCuttingsStock(
       if (insErr || !inserted) return
 
       await supabase.from('stock_corrections').insert({
-        corrected_by: ACTOR,
+        corrected_by: actor,
         stock_stage: 'cuttings',
         entity_table: 'cuttings_stock_balance',
         entity_id: inserted.id,
@@ -252,6 +253,7 @@ export async function applyReadyStockOpeningStock(
   if (nonZero.length === 0) return { error: 'No non-zero quantities entered.' }
 
   const supabase = createServerSupabaseClient()
+  const actor = await getActorId()
   const now = new Date().toISOString()
   const fullReason = `OPENING_BALANCE: ${reason}`
   const warnings: string[] = []
@@ -283,7 +285,7 @@ export async function applyReadyStockOpeningStock(
 
     if (existing) {
       await supabase.from('stock_corrections').insert({
-        corrected_by: ACTOR,
+        corrected_by: actor,
         stock_stage: 'ready',
         entity_table: 'ready_stock_balance',
         entity_id: existing.id,
@@ -314,7 +316,7 @@ export async function applyReadyStockOpeningStock(
         .single()
       if (insErr || !inserted) return
       await supabase.from('stock_corrections').insert({
-        corrected_by: ACTOR,
+        corrected_by: actor,
         stock_stage: 'ready',
         entity_table: 'ready_stock_balance',
         entity_id: inserted.id,
@@ -351,6 +353,7 @@ export async function applyVelvetOpeningStock(
   }
 
   const supabase = createServerSupabaseClient()
+  const actor = await getActorId()
   const now = new Date().toISOString()
   const fullReason = `OPENING_BALANCE: ${reason}`
 
@@ -366,7 +369,7 @@ export async function applyVelvetOpeningStock(
   const newQty = oldQty + addQty
 
   await supabase.from('stock_corrections').insert({
-    corrected_by: ACTOR,
+    corrected_by: actor,
     stock_stage: 'velvet',
     entity_table: 'velvet_stock_balance',
     entity_id: balance.id,

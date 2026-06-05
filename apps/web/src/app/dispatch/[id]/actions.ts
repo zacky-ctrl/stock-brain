@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import type { ActionState } from '@/lib/masters'
 
 export async function voidDispatchAction(
@@ -14,7 +15,7 @@ export async function voidDispatchAction(
   if (!reason) return { error: 'Reason is required to void a dispatch' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const now = new Date().toISOString()
 
   const { data: event } = await supabase

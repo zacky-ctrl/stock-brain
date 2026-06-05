@@ -17,17 +17,27 @@ type UserRoleRow = {
   assigned_by: string | null
 }
 
+type PendingUserRow = {
+  id: string
+  email: string
+  created_at: string
+}
+
 const tdNum: CSSProperties = { ...tableTd, fontVariantNumeric: 'tabular-nums' }
 
 export default async function UsersPage() {
   const supabase = createServerSupabaseClient()
 
-  const { data: usersRaw } = await supabase
-    .from('user_roles')
-    .select('id, email, role, is_active, assigned_at, assigned_by')
-    .order('assigned_at', { ascending: false })
+  const [{ data: usersRaw }, { data: pendingRaw }] = await Promise.all([
+    supabase
+      .from('user_roles')
+      .select('id, email, role, is_active, assigned_at, assigned_by')
+      .order('assigned_at', { ascending: false }),
+    supabase.rpc('get_pending_users'),
+  ])
 
   const users = (usersRaw ?? []) as UserRoleRow[]
+  const pendingUsers = (pendingRaw ?? []) as PendingUserRow[]
 
   return (
     <main style={{ padding: '1.5rem 2rem', maxWidth: '900px' }}>
@@ -40,6 +50,36 @@ export default async function UsersPage() {
         <SectionHeader title="Add User" />
         <AssignUserForm />
       </Card>
+
+      {pendingUsers.length > 0 && (
+        <>
+          <SectionHeader title="Pending Approval" count={pendingUsers.length} />
+          <Card style={{ marginBottom: '2rem' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '560px' }}>
+                <thead>
+                  <tr>
+                    <th style={tableTh}>Email</th>
+                    <th style={tableTh}>Signed Up</th>
+                    <th style={tableTh}>Assign Role</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingUsers.map((u) => (
+                    <tr key={u.id}>
+                      <td style={tableTd}>{u.email}</td>
+                      <td style={tdNum}>{new Date(u.created_at).toLocaleDateString()}</td>
+                      <td style={tableTd}>
+                        <AssignUserForm defaultEmail={u.email} compact />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
+      )}
 
       <SectionHeader title="All Users" count={users.length} />
       <div style={{ overflowX: 'auto' }}>

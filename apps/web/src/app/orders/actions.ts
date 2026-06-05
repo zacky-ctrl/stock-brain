@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import { reserveStock } from '@stock-brain/domain'
 import { createSupabaseReservationStore } from '@/lib/reservation-store'
 import type { ActionState } from '@/lib/masters'
@@ -29,7 +30,7 @@ export async function setOrderPriorityAction(
   }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
 
   if (!confirm) {
     const { data: conflicting } = await supabase
@@ -114,7 +115,7 @@ export async function reserveOrderLinesAction(
   if (!lines.length) return { error: 'No reservable lines' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const store = createSupabaseReservationStore(supabase)
 
   const lineIds = lines.map((l) => l.line_id)

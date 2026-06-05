@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import type { ActionState } from '@/lib/masters'
 
 // ── Edit job metadata (expected_return_date, notes) ───────────
@@ -18,7 +19,7 @@ export async function editJobAction(
   if (!reason) return { error: 'Reason is required for job edits' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
 
   const { data: job } = await supabase
     .from('labour_jobs')
@@ -62,7 +63,7 @@ export async function forceCloseJobAction(
   if (!reason) return { error: 'Reason is required to force-close a job' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const now = new Date().toISOString()
 
   const { data: job } = await supabase
@@ -175,7 +176,7 @@ export async function recordLabourReturn(
   }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
 
   // Fetch the job lines to validate totals and get SKU identity for ready_stock_balance
   const { data: jobLines, error: jobLinesErr } = await supabase

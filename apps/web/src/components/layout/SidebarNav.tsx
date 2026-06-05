@@ -49,6 +49,10 @@ type NavSection = {
   items: NavItem[]
 }
 
+type Props = {
+  role?: string
+}
+
 const NAV_SECTIONS: NavSection[] = [
   {
     label: 'DAILY',
@@ -106,13 +110,44 @@ const MOBILE_TABS: NavItem[] = [
   { href: '/dispatch', label: 'Dispatch', icon: Truck },
 ]
 
-const ALL_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items)
+type RoleNavConfig = {
+  sections: string[]
+  excludeHrefs?: string[]
+}
 
-export function SidebarNav() {
+const NAV_BY_ROLE: Record<string, RoleNavConfig> = {
+  stock_operator: {
+    sections: ['DAILY', 'STOCK'],
+    excludeHrefs: ['/planning/allocation'],
+  },
+  manager: { sections: ['DAILY', 'STOCK', 'REPORTS'] },
+  accountant: { sections: ['REPORTS'] },
+  admin: { sections: ['DAILY', 'STOCK', 'REPORTS', 'SETTINGS'] },
+}
+
+function getVisibleSections(role?: string): NavSection[] {
+  if (!role) return NAV_SECTIONS
+
+  const config = NAV_BY_ROLE[role]
+  if (!config) return NAV_SECTIONS
+
+  return NAV_SECTIONS
+    .filter((section) => config.sections.includes(section.label))
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => !config.excludeHrefs?.includes(item.href)),
+    }))
+}
+
+export function SidebarNav({ role }: Props) {
   const [collapsed, setCollapsed] = useState(true)
   const [hovered, setHovered] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const pathname = usePathname()
+  const visibleSections = getVisibleSections(role)
+  const visibleItems = visibleSections.flatMap((section) => section.items)
+  const visibleHrefs = new Set(visibleItems.map((item) => item.href))
+  const mobileTabs = MOBILE_TABS.filter((item) => item.href === '/' || visibleHrefs.has(item.href))
 
   const isExpanded = !collapsed || hovered
 
@@ -159,7 +194,7 @@ export function SidebarNav() {
 
         {/* Nav sections */}
         <nav style={{ flex: 1, padding: '0.5rem 0', overflowY: 'auto', overflowX: 'hidden' }}>
-          {NAV_SECTIONS.map((section) => (
+          {visibleSections.map((section) => (
             <div key={section.label} style={{ marginBottom: '0.25rem' }}>
               {isExpanded && (
                 <div
@@ -280,7 +315,7 @@ export function SidebarNav() {
           SB
         </Link>
         <div style={{ display: 'flex', flex: 1, gap: '0.25rem', overflowX: 'auto' }}>
-          {ALL_ITEMS.slice(0, 7).map((item) => {
+          {visibleItems.slice(0, 7).map((item) => {
             const active = isActive(item.href)
             const Icon = item.icon
             return (
@@ -311,7 +346,7 @@ export function SidebarNav() {
 
       {/* ── Mobile Bottom Tabs ─────────────────────────────── */}
       <nav className="app-bottomtabs">
-        {MOBILE_TABS.map((item) => {
+        {mobileTabs.map((item) => {
           const active = isActive(item.href)
           const Icon = item.icon
           return (
@@ -378,7 +413,7 @@ export function SidebarNav() {
                 <X size={20} />
               </button>
             </div>
-            {NAV_SECTIONS.map((section) => (
+            {visibleSections.map((section) => (
               <div key={section.label} style={{ marginBottom: '0.75rem' }}>
                 <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: '0.35rem', textTransform: 'uppercase' }}>
                   {section.label}

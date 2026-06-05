@@ -13,7 +13,6 @@ export default function LoginPage() {
       padding: '1.5rem',
     }}>
       <div style={{ width: '100%', maxWidth: '420px' }}>
-        {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{
             fontSize: '2rem',
@@ -37,17 +36,6 @@ export default function LoginPage() {
           borderRadius: 'var(--radius-md)',
           padding: '2rem',
         }}>
-          <h1 style={{
-            fontSize: 'var(--text-lg)',
-            fontWeight: 700,
-            marginBottom: '0.25rem',
-            color: 'var(--text-primary)',
-          }}>
-            Sign in
-          </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', marginBottom: '1.5rem' }}>
-            Enter your email to receive a magic link.
-          </p>
           <LoginForm />
         </div>
       </div>

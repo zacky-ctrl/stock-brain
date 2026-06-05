@@ -3,10 +3,9 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import { createPlanningOverride, resolvePlanningOverride } from '@stock-brain/domain'
 import type { PlanningOverrideStore } from '@stock-brain/domain'
-
-const ACTOR = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
 
 function makeStore(): PlanningOverrideStore {
   const supabase = createServerSupabaseClient()
@@ -67,8 +66,9 @@ export async function createOverrideAction(formData: FormData): Promise<void> {
     throw new Error('All fields are required.')
   }
 
+  const actor = await getActorId()
   const result = await createPlanningOverride(
-    { order_line_id, override_type, reason, created_by: ACTOR },
+    { order_line_id, override_type, reason, created_by: actor },
     makeStore(),
   )
 
@@ -84,7 +84,8 @@ export async function resolveOverrideAction(formData: FormData): Promise<void> {
 
   if (!id) throw new Error('Override ID is required.')
 
-  const result = await resolvePlanningOverride(id, ACTOR, makeStore())
+  const actor = await getActorId()
+  const result = await resolvePlanningOverride(id, actor, makeStore())
 
   if (!result.ok) throw new Error(result.error)
 

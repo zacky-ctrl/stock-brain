@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import { validateAndDeductCuttingsForLabourJob } from '@stock-brain/domain'
 import type { CuttingSessionStore } from '@stock-brain/domain'
 import type { ActionState } from '@/lib/masters'
@@ -100,7 +101,7 @@ export async function createLabourJob(
   }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
 
   // Fetch display names for error messages
   const lineIds = lines.map((l) => l.shape_design_id)

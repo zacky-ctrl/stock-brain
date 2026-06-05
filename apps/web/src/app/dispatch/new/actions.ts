@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import { createDispatch } from '@stock-brain/domain'
 import { createSupabaseDispatchStore } from '@/lib/dispatch-store'
 import type { ActionState } from '@/lib/masters'
@@ -44,7 +45,7 @@ export async function createDispatchAction(
   const customerId = (formData.get('customer_id') as string ?? '').trim()
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const store = createSupabaseDispatchStore(supabase)
 
   const orderedLines = activeLines.filter((l) => !l.line_type || l.line_type === 'ordered' || l.line_type === 'short' || l.line_type === 'substitute')

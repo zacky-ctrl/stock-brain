@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import { recordVelvetReceipt, METRES_PER_BUNDLE } from '@stock-brain/domain'
 import { createSupabaseVelvetReceiptStore } from '@/lib/velvet-receipt-store'
 import type { ActionState } from '@/lib/masters'
@@ -30,7 +31,7 @@ export async function recordVelvetReceiptAction(
   const bundlesReceived = metresReceived / METRES_PER_BUNDLE
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const store = createSupabaseVelvetReceiptStore(supabase)
 
   const result = await recordVelvetReceipt(

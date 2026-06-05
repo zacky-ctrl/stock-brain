@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import type { ActionState } from '@/lib/masters'
 
 /**
@@ -41,7 +42,7 @@ export async function setPriorityOverride(
   }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const now = new Date().toISOString()
 
   // Fetch current active override for this line (to record previous value)

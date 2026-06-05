@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import type { ActionState } from '@/lib/masters'
 
 type LineInput = {
@@ -55,10 +56,7 @@ export async function createOrder(
 
   const supabase = createServerSupabaseClient()
 
-  // Pre-auth development fallback — replace with session.user.id in Phase 3.
-  // The FK constraint on created_by was temporarily dropped (migration 007) so
-  // this UUID need not exist in the users table. Set DEV_ACTOR_ID in .env.local.
-  const createdBy = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const createdBy = await getActorId()
 
   // Snapshot the customer's current brand_rule onto every order line.
   // This preserves historical correctness if the rule changes later.

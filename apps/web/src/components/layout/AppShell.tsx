@@ -1,12 +1,17 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { SidebarNav } from './SidebarNav'
 
 // Auth routes get a clean full-page render without the sidebar shell.
 const AUTH_PREFIXES = ['/login', '/auth/']
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  sidebar,
+}: {
+  children: React.ReactNode
+  sidebar: React.ReactNode
+}) {
   const pathname = usePathname()
   const isAuthRoute = AUTH_PREFIXES.some(p => pathname.startsWith(p))
 
@@ -16,7 +21,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-layout">
-      <SidebarNav />
+      {sidebar}
       <div className="app-main">
         {children}
       </div>

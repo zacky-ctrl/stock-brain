@@ -12,7 +12,7 @@ export async function assignUserRoleAction(
   const role = (formData.get('role') as string ?? '').trim()
 
   if (!email) return { error: 'Email is required' }
-  if (!['admin', 'manager', 'viewer'].includes(role)) return { error: 'Invalid role' }
+  if (!['admin', 'manager', 'stock_operator', 'accountant'].includes(role)) return { error: 'Invalid role' }
 
   const supabase = createServerSupabaseClient()
 

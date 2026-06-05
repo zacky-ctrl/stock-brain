@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import { confirmCuttingSession, voidCuttingSession } from '@stock-brain/domain'
 import type { CuttingSessionStore } from '@stock-brain/domain'
 import type {
@@ -119,7 +120,7 @@ function makeStore(supabase: ReturnType<typeof createServerSupabaseClient>): Cut
 
 export async function confirmSessionAction(sessionId: string): Promise<{ error?: string } | void> {
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const store = makeStore(supabase)
 
   const result = await confirmCuttingSession(sessionId, actor, store)
@@ -137,7 +138,7 @@ export async function voidSessionAction(
 ): Promise<{ error?: string } | void> {
   const reason = (formData.get('void_reason') as string ?? '').trim()
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const store = makeStore(supabase)
 
   const result = await voidCuttingSession(sessionId, reason, actor, store)
@@ -203,7 +204,7 @@ export async function adminVoidConfirmedAction(
   if (!reason) return { error: 'Reason is required to void a confirmed session' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
 
   const { data: session } = await supabase
     .from('cutting_sessions')

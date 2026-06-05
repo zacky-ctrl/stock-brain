@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import type { ActionState } from '@/lib/masters'
 
 // ── Cuttings reconciliation ───────────────────────────────────
@@ -28,7 +29,7 @@ export async function applyCuttingsReconciliation(
   if (variances.length === 0) return { error: 'No variances found — all physical counts match the system.' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const now = new Date().toISOString()
 
   for (const v of variances) {
@@ -83,7 +84,7 @@ export async function applyReadyReconciliation(
   if (variances.length === 0) return { error: 'No applicable variances — all match or physical qty is below committed qty.' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const now = new Date().toISOString()
 
   for (const v of variances) {
@@ -132,7 +133,7 @@ export async function applyVelvetReconciliation(
   if (Math.abs(physicalQty - systemQty) < 0.001) return { error: 'Physical count matches the system — no correction needed.' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const now = new Date().toISOString()
 
   const { data: balance } = await supabase

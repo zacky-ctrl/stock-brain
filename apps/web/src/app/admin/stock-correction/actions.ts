@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import type { ActionState } from '@/lib/masters'
 
 /**
@@ -43,7 +44,7 @@ export async function applyStockCorrection(
   }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
 
   // Read current balance — old_value is required for the audit record
   const { data: balance, error: readErr } = await supabase
@@ -129,7 +130,7 @@ export async function applyCuttingsCorrection(
   if (!Number.isFinite(newQty) || newQty < 0) return { error: 'New quantity must be a non-negative number' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
 
   const { data: balance, error: readErr } = await supabase
     .from('cuttings_stock_balance')
@@ -196,7 +197,7 @@ export async function applyVelvetCorrection(
   if (!Number.isFinite(newBundles) || newBundles < 0) return { error: 'New bundles must be a non-negative number' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
 
   const { data: balance, error: readErr } = await supabase
     .from('velvet_stock_balance')
@@ -260,7 +261,7 @@ export async function applyWipWriteOff(
   if (!Number.isFinite(writeoffQty) || writeoffQty <= 0) return { error: 'Write-off quantity must be positive' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
 
   const { data: jobLine, error: readErr } = await supabase
     .from('labour_job_lines')
@@ -329,7 +330,7 @@ export async function applyBulkReadyCorrections(
   if (!corrections.length) return { error: 'No corrections provided' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
 
   const errors: string[] = []
   let applied = 0
@@ -400,7 +401,7 @@ export async function applyBulkCuttingsCorrections(
   if (!corrections.length) return { error: 'No corrections provided' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
 
   const errors: string[] = []
   let applied = 0

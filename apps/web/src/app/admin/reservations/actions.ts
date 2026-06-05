@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import { releaseReservation, reassignReservation, partialReleaseReservation } from '@stock-brain/domain'
 import { createSupabaseReservationStore } from '@/lib/reservation-store'
 import type { ActionState } from '@/lib/masters'
@@ -17,7 +18,7 @@ export async function releaseReservationAction(
   if (!reason) return { error: 'Reason is required when releasing a reservation' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const store = createSupabaseReservationStore(supabase)
 
   const result = await releaseReservation({ allocation_id: allocationId, reason, released_by: actor }, store)
@@ -46,7 +47,7 @@ export async function reassignReservationAction(
   if (!reason) return { error: 'Reason is required when reassigning a reservation' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const store = createSupabaseReservationStore(supabase)
 
   const result = await reassignReservation(
@@ -81,7 +82,7 @@ export async function partialReleaseReservationAction(
   if (!reason) return { error: 'Reason is required for partial release' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const store = createSupabaseReservationStore(supabase)
 
   const result = await partialReleaseReservation(

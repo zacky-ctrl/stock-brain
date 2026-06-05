@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import { reserveStock, releaseReservation } from '@stock-brain/domain'
 import { createSupabaseReservationStore } from '@/lib/reservation-store'
 import type { ActionState } from '@/lib/masters'
@@ -29,7 +30,7 @@ export async function reserveLineAction(
   if (!Number.isFinite(qty) || qty <= 0) return { error: 'Quantity must be greater than zero' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const store = createSupabaseReservationStore(supabase)
 
   const result = await reserveStock(
@@ -58,7 +59,7 @@ export async function releaseReservationAction(
   if (!allocationId) return { error: 'Allocation ID is missing' }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
   const store = createSupabaseReservationStore(supabase)
 
   const result = await releaseReservation({ allocation_id: allocationId, reason, released_by: actor }, store)
@@ -86,7 +87,7 @@ export async function releaseAllOrderReservationsAction(params: {
   }
 
   const supabase = createServerSupabaseClient()
-  const actor = process.env.DEV_ACTOR_ID ?? '00000000-0000-0000-0000-000000000001'
+  const actor = await getActorId()
 
   // Fetch only allocations that are still active
   const { data: allocations, error: fetchErr } = await supabase
