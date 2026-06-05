@@ -1,4 +1,5 @@
 import { LoginForm } from './LoginForm'
+import { BrandCredit } from '@/components/layout/BrandCredit'
 
 export const metadata = { title: 'Sign In — Stock Brain' }
 
@@ -38,6 +39,8 @@ export default function LoginPage() {
         }}>
           <LoginForm />
         </div>
+
+        <BrandCredit className="brand-credit-login" />
       </div>
     </div>
   )

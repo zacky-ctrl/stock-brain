@@ -289,6 +289,24 @@ a {
   padding: 1rem 1.25rem calc(1rem + env(safe-area-inset-bottom, 0));
 }
 
+/* ── Brand credit ───────────────────────────────────────────── */
+
+.brand-credit {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  padding: 1.25rem 1rem 1.5rem;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  text-align: center;
+}
+
+.brand-credit-login {
+  padding-bottom: 0;
+}
+
 /* ── Card hover ──────────────────────────────────────────────── */
 
 .card-hover {

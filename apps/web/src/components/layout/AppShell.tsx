@@ -1,6 +1,7 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
+import { BrandCredit } from './BrandCredit'
 
 // Auth routes get a clean full-page render without the sidebar shell.
 const AUTH_PREFIXES = ['/login', '/auth/']
@@ -24,6 +25,7 @@ export function AppShell({
       {sidebar}
       <div className="app-main">
         {children}
+        <BrandCredit />
       </div>
     </div>
   )
