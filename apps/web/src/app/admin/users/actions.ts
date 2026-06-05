@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getActorId } from '@/lib/get-actor'
 import type { ActionState } from '@/lib/masters'
 
 export async function assignUserRoleAction(
@@ -15,11 +16,12 @@ export async function assignUserRoleAction(
   if (!['admin', 'manager', 'stock_operator', 'accountant'].includes(role)) return { error: 'Invalid role' }
 
   const supabase = createServerSupabaseClient()
+  const actor = await getActorId()
 
   const { error } = await supabase
     .from('user_roles')
     .upsert(
-      { email, role, is_active: true, assigned_at: new Date().toISOString() },
+      { email, role, is_active: true, assigned_at: new Date().toISOString(), assigned_by: actor },
       { onConflict: 'email' },
     )
 

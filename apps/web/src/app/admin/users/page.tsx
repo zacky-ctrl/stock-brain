@@ -28,7 +28,7 @@ const tdNum: CSSProperties = { ...tableTd, fontVariantNumeric: 'tabular-nums' }
 export default async function UsersPage() {
   const supabase = createServerSupabaseClient()
 
-  const [{ data: usersRaw }, { data: pendingRaw }] = await Promise.all([
+  const [{ data: usersRaw, error: usersError }, { data: pendingRaw, error: pendingError }] = await Promise.all([
     supabase
       .from('user_roles')
       .select('id, email, role, is_active, assigned_at, assigned_by')
@@ -50,6 +50,17 @@ export default async function UsersPage() {
         <SectionHeader title="Add User" />
         <AssignUserForm />
       </Card>
+
+      {(usersError || pendingError) && (
+        <Card style={{ marginBottom: '2rem', borderColor: 'var(--danger)' }}>
+          <div style={{ color: 'var(--danger)', fontSize: 'var(--text-sm)', fontWeight: 600 }}>
+            User access data could not be loaded.
+          </div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-xs)', marginTop: '0.4rem' }}>
+            {(usersError?.message ?? pendingError?.message) ?? 'Unknown database error'}
+          </div>
+        </Card>
+      )}
 
       {pendingUsers.length > 0 && (
         <>

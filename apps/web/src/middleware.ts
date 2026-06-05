@@ -43,8 +43,9 @@ export async function middleware(request: NextRequest) {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 2000)
     try {
+      const email = (user.email ?? '').toLowerCase()
       const roleRes = await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/user_roles?email=eq.${encodeURIComponent(user.email ?? '')}&is_active=eq.true&select=role`,
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/user_roles?email=eq.${encodeURIComponent(email)}&is_active=eq.true&select=role`,
         {
           headers: {
             apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,

@@ -8,11 +8,12 @@ export async function SidebarNavServer() {
     const { data: { user } } = await authClient.auth.getUser()
     if (!user?.email) return <SidebarNav role={undefined} />
 
+    const email = user.email.toLowerCase()
     const supabase = createServerSupabaseClient()
     const { data } = await supabase
       .from('user_roles')
       .select('role')
-      .eq('email', user.email)
+      .eq('email', email)
       .eq('is_active', true)
       .single()
 
