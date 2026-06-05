@@ -12,6 +12,7 @@ import { PlanningTab } from './tabs/PlanningTab'
 import { HistoryTab } from './tabs/HistoryTab'
 import { MoreTab } from './tabs/MoreTab'
 import type { OrderDetailClientProps, OrderLineForDisplay, EngineRow, DispatchEventFull, DispatchLine, ChallanCellEntry, LineAmendmentRecord, HeaderAmendmentRecord, ExtraSkuOption } from './types'
+import type { PlanningLineStatus } from '@stock-brain/types'
 
 type Tab = 'lines' | 'planning' | 'history' | 'more'
 const TAB_LABELS: Record<Tab, string> = { lines: 'Lines', planning: 'Planning', history: 'History', more: 'More' }

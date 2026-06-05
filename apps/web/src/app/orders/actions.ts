@@ -40,10 +40,10 @@ export async function setOrderPriorityAction(
       .limit(1)
 
     if (conflicting && conflicting.length > 0) {
-      const ol = conflicting[0].order_lines as { order_id: string; orders: { customers: { name: string } | null } | null } | null
+      const ol = conflicting[0].order_lines?.[0] as { order_id: string; orders?: { customers?: { name: string }[] }[] } | undefined
       const conflictingOrderId = ol?.order_id ?? null
       if (conflictingOrderId && conflictingOrderId !== orderId) {
-        const customerName = ol?.orders?.customers?.name ?? 'another order'
+        const customerName = ol?.orders?.[0]?.customers?.[0]?.name ?? 'another order'
         return {
           error: `P${priorityValue} is already assigned to ${customerName}. To force this priority, submit again with confirm=true.`,
         }
