@@ -48,10 +48,8 @@ function injectPrintStyle() {
   el.id = PRINT_STYLE_ID
   el.textContent = `
 @media print {
-  body * { visibility: hidden; }
-  .matrix-print-root { visibility: visible; position: fixed; top: 0; left: 0; right: 0; width: 100%; }
-  .matrix-print-root * { visibility: visible; }
   .matrix-no-print { display: none !important; }
+  .matrix-print-root { overflow: visible !important; max-height: none !important; }
   .matrix-print-root table { border-collapse: collapse; width: 100%; }
   .matrix-print-root th,
   .matrix-print-root td {
@@ -69,7 +67,6 @@ function injectPrintStyle() {
   }
   .matrix-print-title { font-size: 11pt; font-weight: bold; margin-bottom: 6pt; }
   .matrix-print-label { font-size: 9pt; color: #333; margin-bottom: 2pt; }
-  @page { size: A4 landscape; margin: 1cm; }
 }
 `
   document.head.appendChild(el)

@@ -293,6 +293,16 @@ export default async function CuttingRequiredReportPage({ searchParams }: PagePr
           {/* ── Section 1: CUT ON MACHINE TODAY ── */}
           {cutOnMachineRows.length > 0 && (
             <div className="print-section">
+              {/* Print-only section header — hidden on screen */}
+              <div className="print-only-header" style={{ display: 'none', marginBottom: '12px', paddingBottom: '8px', borderBottom: '2px solid #000' }}>
+                <div style={{ fontSize: '15px', fontWeight: 'bold' }}>NIRANKARI BINDI</div>
+                <div style={{ fontSize: '12px', fontWeight: 'bold', textDecoration: 'underline', marginTop: '2px' }}>Machine Cutting Required — {today}</div>
+                <div style={{ fontSize: '10px', marginTop: '3px', color: '#333' }}>
+                  Cut on Machine &nbsp;|&nbsp; {cutOnMachineRows.length} SKUs &nbsp;·&nbsp; {fmt(totalCutQty)} gross
+                  {totalBundles > 0 && ` · Velvet: ${fmt(totalBundles)} bundles (${fmt(totalBundles * METRES_PER_BUNDLE)} m)`}
+                </div>
+              </div>
+
               <div style={{ borderLeft: '3px solid var(--danger)', paddingLeft: '0.75rem', marginBottom: '1rem' }}>
                 <h2 style={{ ...sectionHeading, color: 'var(--danger)' }}>Cut on Machine Today</h2>
                 <p style={sectionSummary}>
@@ -307,7 +317,7 @@ export default async function CuttingRequiredReportPage({ searchParams }: PagePr
 
               <div style={{ marginBottom: '2rem' }}>
                 <h3 style={subHeading}>Matrix View — Cut Qty (gross)</h3>
-                <MatrixGrid data={cutMatrixData} mode="view" printTitle={`Machine Cutting Required — ${today}`} />
+                <MatrixGrid data={cutMatrixData} mode="view" />
               </div>
 
               {totalBundles > 0 && (
@@ -395,6 +405,15 @@ export default async function CuttingRequiredReportPage({ searchParams }: PagePr
           {/* ── Section 2: PROCURE VELVET FIRST ── */}
           {procureVelvetRows.length > 0 && (
             <div className="print-section">
+              {/* Print-only section header — hidden on screen */}
+              <div className="print-only-header" style={{ display: 'none', marginBottom: '12px', paddingBottom: '8px', borderBottom: '2px solid #000' }}>
+                <div style={{ fontSize: '15px', fontWeight: 'bold' }}>NIRANKARI BINDI</div>
+                <div style={{ fontSize: '12px', fontWeight: 'bold', textDecoration: 'underline', marginTop: '2px' }}>Procure Velvet — {today}</div>
+                <div style={{ fontSize: '10px', marginTop: '3px', color: '#333' }}>
+                  Procure Velvet &nbsp;|&nbsp; {procureVelvetRows.length} SKUs &nbsp;·&nbsp; {fmt(totalProcureQty)} gross shortage
+                </div>
+              </div>
+
               <div style={{ borderLeft: '3px solid var(--warning)', paddingLeft: '0.75rem', marginBottom: '1rem' }}>
                 <h2 style={{ ...sectionHeading, color: 'var(--warning)' }}>Procure Velvet First</h2>
                 <p style={sectionSummary}>
@@ -406,7 +425,7 @@ export default async function CuttingRequiredReportPage({ searchParams }: PagePr
 
               <div style={{ marginBottom: '2rem' }}>
                 <h3 style={subHeading}>Matrix View — Shortage Qty (gross)</h3>
-                <MatrixGrid data={procureMatrixData} mode="view" printTitle={`Procure Velvet — ${today}`} />
+                <MatrixGrid data={procureMatrixData} mode="view" />
               </div>
 
               <div className="no-print" style={{ marginBottom: '2.5rem' }}>
@@ -456,30 +475,60 @@ export default async function CuttingRequiredReportPage({ searchParams }: PagePr
                   Velvet procurement quantities — coming once conversion rates are fully entered
                 </p>
               </div>
+              {/* Signature line — only on the last section when printed */}
+              <div className="print-signature" style={{ marginTop: '28px', fontSize: '11px' }}>
+                <p style={{ margin: 0 }}>
+                  Prepared by: _______________________________ &nbsp;&nbsp;&nbsp; Approved by: _______________________________ &nbsp;&nbsp;&nbsp; Date: ___________
+                </p>
+              </div>
             </div>
           )}
 
-          <div className="print-signature">
-            <p style={{ marginTop: '32px', fontSize: '12px' }}>
-              Approved by: _______________________________ &nbsp;&nbsp;&nbsp; Date: ___________
-            </p>
-          </div>
+          {/* Signature line on cut-on-machine section when procure section is absent */}
+          {cutOnMachineRows.length > 0 && procureVelvetRows.length === 0 && (
+            <div className="print-signature" style={{ marginTop: '28px', fontSize: '11px' }}>
+              <p style={{ margin: 0 }}>
+                Prepared by: _______________________________ &nbsp;&nbsp;&nbsp; Approved by: _______________________________ &nbsp;&nbsp;&nbsp; Date: ___________
+              </p>
+            </div>
+          )}
         </>
       )}
 
       <style>{`
         @media print {
-          @page { size: A4 landscape; margin: 1cm; }
-          .print-section + .print-section { page-break-before: always; }
-          .print-signature { display: block !important; }
-          .no-print { display: none !important; }
-          table { width: 100%; font-size: 9px; }
-          thead { display: table-header-group; }
-          tr { page-break-inside: avoid; }
+          @page { size: A4 landscape; margin: 12mm 12mm 15mm 12mm; }
+          /* Section page breaks */
+          .print-section { page-break-after: auto; }
+          .print-section + .print-section { page-break-before: always !important; break-before: page !important; }
+          /* Show print-only elements */
+          .print-only-header { display: block !important; }
+          .print-signature { display: block !important; margin-top: 24px !important; }
+          /* Hide screen-only chrome */
+          .no-print,
+          .report-header-screen,
+          .report-filter-bar { display: none !important; }
+          /* Section heading strip — hide coloured left-border heading, keep matrix */
+          .print-section > div:nth-child(2) { display: none !important; }
+          /* Table print rules */
+          table { width: 100% !important; font-size: 9pt !important; border-collapse: collapse !important; }
+          thead { display: table-header-group !important; }
+          tfoot { display: table-footer-group !important; }
+          tr { page-break-inside: avoid !important; }
+          th, td { border: 1px solid #000 !important; padding: 3px 6px !important; background: #fff !important; color: #000 !important; }
+          th { background: #e8e8e8 !important; font-weight: bold !important; }
+          /* Matrix header row keeps dark blue */
+          .matrix-header-row th { background: #1e3a5f !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          /* Layout reset */
           main { padding: 0 !important; max-width: 100% !important; }
-          div[style*="overflow"] { overflow: visible !important; }
+          .matrix-print-root { overflow: visible !important; max-height: none !important; }
+          /* SKU summary text */
+          .matrix-print-root > div:last-of-type { font-size: 9pt !important; color: #333 !important; }
+          /* Velvet requirement table */
+          .velvet-req-table { margin-top: 10pt !important; }
         }
         @media screen {
+          .print-only-header { display: none !important; }
           .print-signature { display: none; }
         }
       `}</style>
