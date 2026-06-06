@@ -4,11 +4,13 @@ import { tableTh, tableTd } from '@/lib/ui'
 import { VoidDispatchForm } from './VoidDispatchForm'
 import type { AffectedOrder } from './VoidDispatchForm'
 import { Badge, statusBadgeVariant } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { PrintButton } from '@/components/ui/PrintButton'
 import type { CSSProperties } from 'react'
 import Link from 'next/link'
+import { CreateDraftInvoiceForm } from '@/app/accounting/invoices/CreateDraftInvoiceForm'
 
 function fmt(n: number): string {
   return n % 1 === 0 ? String(n) : n.toFixed(3)
@@ -64,6 +66,20 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
   }
   const event = eventRaw as unknown as EventRow
   const customer = resolveRef(event.customers)
+
+  const { data: invoiceLinkRaw } = await supabase
+    .from('sales_invoice_dispatches')
+    .select('sales_invoice_id, sales_invoices(id, invoice_number, status)')
+    .eq('dispatch_event_id', id)
+    .maybeSingle()
+
+  type InvoiceLinkRow = {
+    sales_invoice_id: string
+    sales_invoices: { id: string; invoice_number: string | null; status: string } | { id: string; invoice_number: string | null; status: string }[] | null
+  }
+
+  const invoiceLink = invoiceLinkRaw as unknown as InvoiceLinkRow | null
+  const linkedInvoice = resolveRef(invoiceLink?.sales_invoices)
 
   const { data: linesRaw } = await supabase
     .from('dispatch_lines')
@@ -173,7 +189,8 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
   const dispatchDate = (event as { dispatch_date: string }).dispatch_date
   const dispatchRef = (event as { reference?: string | null }).reference
   const challanNumber = event.challan_number ?? 'Pending challan number'
-  const invoiceNumber = event.invoice_number
+  const invoiceNumber = linkedInvoice?.invoice_number ?? event.invoice_number
+  const invoiceId = linkedInvoice?.id ?? invoiceLink?.sales_invoice_id ?? null
   const pageTitle = `Challan — ${challanNumber}`
 
   return (
@@ -183,7 +200,18 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
         backHref="/dispatch"
         badge={<Badge variant={statusBadgeVariant((event as { status: string }).status)} label={(event as { status: string }).status} size="sm" />}
         subtitle={(event as { id: string }).id}
-        actions={<PrintButton label="Print Challan" />}
+        actions={
+          <>
+            {invoiceId && (
+              <Link href={`/accounting/invoices/${invoiceId}`}>
+                <Button type="button" variant="secondary" size="sm">
+                  {invoiceNumber ? 'View Invoice' : 'View Draft Invoice'}
+                </Button>
+              </Link>
+            )}
+            <PrintButton label="Print Challan" />
+          </>
+        }
       />
 
       {/* Meta */}
@@ -205,6 +233,9 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
         {invoiceNumber && (
           <div style={metaRow}><span style={metaLabel}>Invoice No.</span><span style={{ ...metaValue, fontWeight: 700 }}>{invoiceNumber}</span></div>
         )}
+        {!invoiceNumber && linkedInvoice?.status === 'draft' && (
+          <div style={metaRow}><span style={metaLabel}>Invoice</span><span style={{ ...metaValue, fontWeight: 700 }}>Draft pending issue</span></div>
+        )}
         <div style={metaRow}><span style={metaLabel}>Date</span><span style={metaValue}>{dispatchDate}</span></div>
         {dispatchRef && (
           <div style={metaRow}><span style={metaLabel}>Reference</span><span style={metaValue}>{dispatchRef}</span></div>
@@ -224,6 +255,18 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
           </div>
         </div>
       </Card>
+
+      {(event as { status: string }).status === 'confirmed' && !invoiceId && (
+        <Card style={{ marginBottom: '1.5rem' }}>
+          <h3 style={{ margin: '0 0 0.35rem', fontSize: 'var(--text-base)' }}>
+            Create Draft Invoice
+          </h3>
+          <p style={{ margin: '0 0 1rem', color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
+            Uses customer yellow/white rates per gross and this challan's actual dispatched quantities.
+          </p>
+          <CreateDraftInvoiceForm dispatchId={id} defaultInvoiceDate={dispatchDate} />
+        </Card>
+      )}
 
       {extrasQty > 0 && (
         <div style={{ padding: '0.6rem 0.9rem', marginBottom: '1.5rem', background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 'var(--radius-sm)', fontSize: '0.82rem', color: 'var(--info)' }}>

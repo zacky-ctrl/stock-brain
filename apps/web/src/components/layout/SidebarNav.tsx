@@ -28,6 +28,7 @@ import {
   Grid3X3,
   X,
   FileText,
+  ReceiptText,
   TrendingUp,
   Layers,
   UserCheck,
@@ -94,6 +95,12 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: 'ACCOUNTING',
+    items: [
+      { href: '/accounting/invoices', label: 'Invoices', icon: ReceiptText },
+    ],
+  },
+  {
     label: 'SETTINGS',
     items: [
       { href: '/masters',                  label: 'Masters',           icon: Settings },
@@ -114,17 +121,17 @@ const MOBILE_TABS: NavItem[] = [
 ]
 
 const ROLE_SECTIONS: Record<string, string[]> = {
-  admin: ['DAILY', 'STOCK', 'REPORTS', 'SETTINGS'],
-  manager: ['DAILY', 'STOCK', 'REPORTS'],
+  admin: ['DAILY', 'STOCK', 'REPORTS', 'ACCOUNTING', 'SETTINGS'],
+  manager: ['DAILY', 'STOCK', 'REPORTS', 'ACCOUNTING'],
   stock_operator: ['DAILY', 'STOCK'],
-  accountant: ['REPORTS'],
+  accountant: ['REPORTS', 'ACCOUNTING'],
   viewer: ['REPORTS'],
 }
 
 function getVisibleSections(role?: string): NavSection[] {
   if (!role) return NAV_SECTIONS
 
-  const sectionLabels = ROLE_SECTIONS[role] ?? ['DAILY', 'STOCK', 'REPORTS', 'SETTINGS']
+  const sectionLabels = ROLE_SECTIONS[role] ?? ['DAILY', 'STOCK', 'REPORTS', 'ACCOUNTING', 'SETTINGS']
 
   return NAV_SECTIONS
     .filter((section) => sectionLabels.includes(section.label))
@@ -146,6 +153,7 @@ export function SidebarNav({ role }: Props) {
     DAILY: true,
     STOCK: false,
     REPORTS: false,
+    ACCOUNTING: false,
     SETTINGS: false,
   }))
   const pathname = usePathname()

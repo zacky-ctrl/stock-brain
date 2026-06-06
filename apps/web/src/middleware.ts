@@ -82,7 +82,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 
-  if ((role === 'viewer' || role === 'accountant') &&
+  if (role === 'accountant' &&
+      !pathname.startsWith('/reports') &&
+      !pathname.startsWith('/dispatch') &&
+      !pathname.startsWith('/accounting') &&
+      pathname !== '/') {
+    return NextResponse.redirect(new URL('/accounting/invoices', request.url))
+  }
+
+  if (role === 'viewer' &&
       !pathname.startsWith('/reports') &&
       !pathname.startsWith('/dispatch') &&
       pathname !== '/') {
@@ -92,6 +100,7 @@ export async function middleware(request: NextRequest) {
   if (role === 'stock_operator' && (
       pathname.startsWith('/reports') ||
       pathname.startsWith('/planning/allocation') ||
+      pathname.startsWith('/accounting') ||
       pathname.startsWith('/admin') ||
       pathname.startsWith('/masters'))) {
     return NextResponse.redirect(new URL('/', request.url))
