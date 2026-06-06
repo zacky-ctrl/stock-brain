@@ -107,6 +107,26 @@ export function MatrixGrid({
     return init
   })
 
+  useEffect(() => {
+    if (mode !== 'edit') return
+    setEditState((prev) => {
+      const next: Record<string, Record<string, string>> = { ...prev }
+      for (const row of data.rows) {
+        const rowKey = `${row.design_id}|${row.colour_id}`
+        const existingRow = next[rowKey] ?? {}
+        const nextRow = { ...existingRow }
+        for (const size of data.sizes) {
+          const qty = row.cells[size.size_id] ?? 0
+          if (qty > 0 || nextRow[size.size_id] === undefined) {
+            nextRow[size.size_id] = qty > 0 ? String(qty) : ''
+          }
+        }
+        next[rowKey] = nextRow
+      }
+      return next
+    })
+  }, [data.rows, data.sizes, mode])
+
   const [hasDraft, setHasDraft] = useState(false)
   const [draftAge, setDraftAge] = useState('')
 
@@ -201,7 +221,7 @@ export function MatrixGrid({
       const [design_id, colour_id] = rowKey.split('|')
       for (const [size_id, val] of Object.entries(sizes)) {
         const qty = parseFloat(val) || 0
-        if (qty > 0) onCellChange?.({ design_id, colour_id, size_id, quantity: qty })
+        onCellChange?.({ design_id, colour_id, size_id, quantity: qty })
       }
     }
     setHasDraft(false)

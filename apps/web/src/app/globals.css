@@ -1760,6 +1760,82 @@ a {
   margin-top: 0.75rem;
 }
 
+.dispatch-add-line {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.75rem 0 0.9rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 138, 0, 0.45);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 138, 0, 0.08);
+}
+
+.dispatch-add-line-fields {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.3fr) minmax(90px, 0.7fr) minmax(90px, 0.7fr) minmax(110px, 0.8fr);
+  gap: 0.65rem;
+  flex: 1;
+}
+
+.dispatch-add-line label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.dispatch-add-line select,
+.dispatch-add-line input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  padding: 0.4rem 0.55rem;
+}
+
+.dispatch-add-line-button {
+  min-height: 40px;
+  border: 1px solid rgba(255, 138, 0, 0.75);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 138, 0, 0.18);
+  color: #ffb14a;
+  cursor: pointer;
+  font-weight: 800;
+  padding: 0.45rem 0.85rem;
+  white-space: nowrap;
+}
+
+.dispatch-add-line-button:hover {
+  border-color: #ffb14a;
+  background: rgba(255, 138, 0, 0.25);
+}
+
+.dispatch-message {
+  margin: 0.6rem 0 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.dispatch-message-extra {
+  color: #ffb14a;
+  background: rgba(255, 138, 0, 0.11);
+  border: 1px solid rgba(255, 138, 0, 0.75);
+}
+
+.dispatch-message-danger {
+  color: var(--danger);
+  background: var(--danger-subtle);
+  border: 1px solid var(--danger);
+}
+
 .dispatch-parcel-summary {
   margin-bottom: 1.25rem;
   padding: 0.75rem 1rem;
@@ -1877,6 +1953,15 @@ a {
 
   .dispatch-stock-reference-meta {
     white-space: normal;
+  }
+
+  .dispatch-add-line {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dispatch-add-line-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .dispatch-matrix-edit-wrap .matrix-grid-compact-mobile {

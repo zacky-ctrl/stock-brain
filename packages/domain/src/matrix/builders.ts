@@ -399,54 +399,65 @@ export function parseMatrixToDispatchLines(
   for (const change of changes) {
     if (change.quantity <= 0) continue
 
-    const matching = openLines.filter(
+    const sameSkuLines = openLines.filter(
       (l) =>
         l.shape_design_id === change.design_id &&
         l.bindi_colour_id === change.colour_id &&
         l.size_id === change.size_id &&
         l.ready_stock_balance_id !== '' &&
-        l.available_stock_qty > 0 &&
+        l.available_stock_qty > 0,
+    )
+
+    const balanceCapacity = new Map<string, number>()
+    for (const line of sameSkuLines) {
+      balanceCapacity.set(
+        line.ready_stock_balance_id,
+        Math.max(balanceCapacity.get(line.ready_stock_balance_id) ?? 0, line.available_stock_qty),
+      )
+    }
+    const usedByBalance = new Map<string, number>()
+
+    const matching = sameSkuLines.filter(
+      (l) =>
         l.open_qty > 0,
     )
 
     let remaining = change.quantity
-    let firstBalanceId = ''
 
     for (const line of matching) {
       if (remaining <= 0) break
-      const qty = Math.min(remaining, line.open_qty, line.available_stock_qty)
+      const balanceId = line.ready_stock_balance_id
+      const balanceRemaining = (balanceCapacity.get(balanceId) ?? 0) - (usedByBalance.get(balanceId) ?? 0)
+      const qty = Math.min(remaining, line.open_qty, Math.max(0, balanceRemaining))
       if (qty > 0) {
-        if (!firstBalanceId) firstBalanceId = line.ready_stock_balance_id
         result.push({
           order_line_id: line.id,
-          ready_stock_balance_id: line.ready_stock_balance_id,
+          ready_stock_balance_id: balanceId,
           quantity_dispatched: qty,
           line_type: 'ordered',
         })
+        usedByBalance.set(balanceId, (usedByBalance.get(balanceId) ?? 0) + qty)
         remaining -= qty
       }
     }
 
-    // Excess above open_qty becomes a parcel filler on the same balance
+    // Excess above open_qty becomes parcel filler. Spread it across available
+    // ready-stock balances for this SKU so one balance row is not overdrawn.
     if (remaining > 0) {
-      if (!firstBalanceId) {
-        // No ordered lines had stock — fall back to any balance for this SKU
-        const fallback = openLines.find(
-          (l) =>
-            l.shape_design_id === change.design_id &&
-            l.bindi_colour_id === change.colour_id &&
-            l.size_id === change.size_id &&
-            l.ready_stock_balance_id !== '',
-        )
-        if (fallback) firstBalanceId = fallback.ready_stock_balance_id
-      }
-      if (firstBalanceId) {
+      for (const line of sameSkuLines) {
+        if (remaining <= 0) break
+        const balanceId = line.ready_stock_balance_id
+        const balanceRemaining = (balanceCapacity.get(balanceId) ?? 0) - (usedByBalance.get(balanceId) ?? 0)
+        const qty = Math.min(remaining, Math.max(0, balanceRemaining))
+        if (qty <= 0) continue
         result.push({
           order_line_id: null,
-          ready_stock_balance_id: firstBalanceId,
-          quantity_dispatched: remaining,
+          ready_stock_balance_id: balanceId,
+          quantity_dispatched: qty,
           line_type: 'extra',
         })
+        usedByBalance.set(balanceId, (usedByBalance.get(balanceId) ?? 0) + qty)
+        remaining -= qty
       }
     }
   }

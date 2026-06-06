@@ -21,7 +21,7 @@ import type {
   ColourMasterRow,
   OrderLineForDispatch,
 } from '@stock-brain/domain'
-import type { MatrixChangeEvent, FilterConfig, ActiveFilters } from '@stock-brain/types'
+import type { MatrixChangeEvent, FilterConfig, ActiveFilters, MatrixGridData, MatrixRow } from '@stock-brain/types'
 
 // ── Parcel target ────────────────────────────────────────────
 const PARCEL_TARGET_MIN = 50
@@ -89,12 +89,23 @@ type OrderedLineState = {
   override_reason: string    // reason if going above available stock
 }
 
+type AddLineState = {
+  designId: string
+  colourId: string
+  sizeId: string
+  quantity: string
+}
+
 function fmt(n: number): string {
   return n % 1 === 0 ? String(n) : n.toFixed(3)
 }
 
 function matrixCellKey(change: MatrixChangeEvent): string {
   return `${change.design_id}|${change.colour_id}|${change.size_id}`
+}
+
+function matrixKey(designId: string, colourId: string, sizeId: string): string {
+  return `${designId}|${colourId}|${sizeId}`
 }
 
 function buildInitialMatrixChanges(openLines: OpenOrderLine[]): MatrixChangeEvent[] {
@@ -115,6 +126,57 @@ function buildInitialMatrixChanges(openLines: OpenOrderLine[]): MatrixChangeEven
   return [...changesByCell.values()]
 }
 
+function buildDispatchMatrixData(
+  changes: MatrixChangeEvent[],
+  sizes: SizeMasterRow[],
+  designs: DesignMasterRow[],
+  colours: ColourMasterRow[],
+  contextLabel: string,
+): MatrixGridData {
+  const designMap = new Map(designs.map((d) => [d.id, d]))
+  const colourMap = new Map(colours.map((c) => [c.id, c]))
+  const rowsByKey = new Map<string, MatrixRow>()
+
+  for (const change of changes) {
+    const design = designMap.get(change.design_id)
+    const colour = colourMap.get(change.colour_id)
+    if (!design || !colour) continue
+
+    const rowKey = `${change.design_id}|${change.colour_id}`
+    const existing = rowsByKey.get(rowKey)
+    if (existing) {
+      existing.cells[change.size_id] = change.quantity
+      continue
+    }
+
+    rowsByKey.set(rowKey, {
+      design_id: change.design_id,
+      design_name: design.name,
+      colour_id: change.colour_id,
+      colour_name: colour.name,
+      colour_code: colour.code,
+      cells: { [change.size_id]: change.quantity },
+    })
+  }
+
+  const rows = [...rowsByKey.values()].sort((a, b) => {
+    const da = designMap.get(a.design_id)?.sort_order ?? 0
+    const db = designMap.get(b.design_id)?.sort_order ?? 0
+    if (da !== db) return da - db
+    const ca = colourMap.get(a.colour_id)?.sort_order ?? 0
+    const cb = colourMap.get(b.colour_id)?.sort_order ?? 0
+    return ca - cb
+  })
+
+  return {
+    sizes: [...sizes]
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((size) => ({ size_id: size.id, size_name: size.code, sort_order: size.sort_order })),
+    rows,
+    context_label: contextLabel,
+  }
+}
+
 export function DispatchForm({
   customerId,
   customerName,
@@ -131,6 +193,12 @@ export function DispatchForm({
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({})
   const [showAvailableStock, setShowAvailableStock] = useState(false)
   const dispatchResult = state && 'dispatch_id' in state ? state : null
+  const [addLine, setAddLine] = useState<AddLineState>(() => ({
+    designId: designMaster[0]?.id ?? '',
+    colourId: colourMaster[0]?.id ?? '',
+    sizeId: sizeMaster[0]?.id ?? '',
+    quantity: '',
+  }))
 
   const [entries, setEntries] = useState<OrderedLineState[]>(
     openLines.map((ol) => ({
@@ -149,8 +217,16 @@ export function DispatchForm({
     setEntries((prev) => prev.map((e, idx) => (idx === i ? { ...e, [field]: value } : e)))
 
   const [matrixChanges, setMatrixChanges] = useState<MatrixChangeEvent[]>(() => buildInitialMatrixChanges(openLines))
+  const [dispatchState, setDispatchState] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {}
+    for (const change of buildInitialMatrixChanges(openLines)) {
+      initial[matrixCellKey(change)] = change.quantity
+    }
+    return initial
+  })
 
-  const handleMatrixCellChange = useCallback((change: MatrixChangeEvent) => {
+  const upsertMatrixChange = useCallback((change: MatrixChangeEvent) => {
+    const key = matrixCellKey(change)
     setMatrixChanges((prev) => {
       const idx = prev.findIndex(
         (c) => c.design_id === change.design_id && c.colour_id === change.colour_id && c.size_id === change.size_id,
@@ -161,6 +237,11 @@ export function DispatchForm({
         return next
       }
       return [...prev, change]
+    })
+    setDispatchState((prev) => {
+      const next = { ...prev }
+      next[key] = change.quantity
+      return next
     })
   }, [])
 
@@ -240,8 +321,7 @@ export function DispatchForm({
           { context_label: `Open demand — ${customerName}` },
         )
       : null,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canShowMatrix, customerName],
+    [canShowMatrix, openLines, sizeMaster, designMaster, colourMaster, customerName],
   )
 
   const fullAvailStockMatrix = useMemo(() =>
@@ -250,15 +330,23 @@ export function DispatchForm({
           context_label: 'Available ready stock',
         })
       : null,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canShowMatrix, availableStockRows],
+    [canShowMatrix, availableStockRows, sizeMaster, designMaster, colourMaster],
+  )
+
+  const dispatchMatrixData = useMemo(
+    () =>
+      canShowMatrix
+        ? buildDispatchMatrixData(matrixChanges, sizeMaster, designMaster, colourMaster, `Dispatch packing — ${customerName}`)
+        : null,
+    [canShowMatrix, matrixChanges, sizeMaster, designMaster, colourMaster, customerName],
   )
 
   const filterConfig: FilterConfig = useMemo(() => {
-    if (!fullOpenQtyMatrix) return { fields: [] }
+    const sourceMatrix = dispatchMatrixData ?? fullOpenQtyMatrix
+    if (!sourceMatrix) return { fields: [] }
     const designsSeen = new Map<string, string>()
     const coloursSeen = new Map<string, string>()
-    for (const row of fullOpenQtyMatrix.rows) {
+    for (const row of sourceMatrix.rows) {
       designsSeen.set(row.design_id, row.design_name)
       coloursSeen.set(row.colour_id, row.colour_code)
     }
@@ -268,24 +356,16 @@ export function DispatchForm({
         { key: 'colour', label: 'CLR', options: [...coloursSeen.entries()].map(([id, label]) => ({ id, label })) },
       ],
     }
-  }, [fullOpenQtyMatrix])
+  }, [dispatchMatrixData, fullOpenQtyMatrix])
 
-  const openQtyMatrixData = useMemo(
-    () => fullOpenQtyMatrix ? filterMatrixData(fullOpenQtyMatrix, activeFilters, { design: 'design', colour: 'colour' }) : null,
-    [fullOpenQtyMatrix, activeFilters],
+  const dispatchMatrixFilteredData = useMemo(
+    () => dispatchMatrixData ? filterMatrixData(dispatchMatrixData, activeFilters, { design: 'design', colour: 'colour' }) : null,
+    [dispatchMatrixData, activeFilters],
   )
   const availStockMatrixData = useMemo(
     () => fullAvailStockMatrix ? filterMatrixData(fullAvailStockMatrix, activeFilters, { design: 'design', colour: 'colour' }) : null,
     [fullAvailStockMatrix, activeFilters],
   )
-
-  const [dispatchState, setDispatchState] = useState<Record<string, number>>(() => {
-    const initial: Record<string, number> = {}
-    for (const change of buildInitialMatrixChanges(openLines)) {
-      initial[matrixCellKey(change)] = change.quantity
-    }
-    return initial
-  })
 
   const highlightDispatchCell = useCallback(
     (row: { design_id: string; colour_id: string }, sizeId: string) => {
@@ -294,10 +374,9 @@ export function DispatchForm({
       const avail = availableByCell.get(key) ?? 0
       const openQty = openQtyByCell.get(key) ?? 0
       if (openQty <= 0 && entered <= 0) return 'normal' as const
-      if (openQty > 0 && avail === 0) return 'shortage' as const
       if (entered > avail) return 'shortage' as const       // red — cannot dispatch entered qty from ready stock
-      if (entered > openQty) return 'excess' as const       // amber — excess over order, becomes extra
-      if (openQty > 0 && avail < openQty) return 'partial' as const
+      if (entered > openQty) return 'excess' as const       // orange — filler / extra SKU
+      if (entered > 0 && entered < openQty) return 'partial' as const
       if (entered > 0) return 'covered' as const            // green — full ordered qty can be dispatched
       return 'normal' as const
     },
@@ -305,12 +384,22 @@ export function DispatchForm({
   )
 
   const handleDispatchCellChange = useCallback((change: MatrixChangeEvent) => {
-    handleMatrixCellChange(change)
-    setDispatchState((prev) => ({
-      ...prev,
-      [`${change.design_id}|${change.colour_id}|${change.size_id}`]: change.quantity,
-    }))
-  }, [handleMatrixCellChange])
+    upsertMatrixChange(change)
+  }, [upsertMatrixChange])
+
+  const handleAddLine = useCallback(() => {
+    const quantity = parseFloat(addLine.quantity) || 0
+    if (!addLine.designId || !addLine.colourId || !addLine.sizeId || quantity <= 0) return
+    const key = matrixKey(addLine.designId, addLine.colourId, addLine.sizeId)
+    const currentQty = dispatchState[key] ?? 0
+    upsertMatrixChange({
+      design_id: addLine.designId,
+      colour_id: addLine.colourId,
+      size_id: addLine.sizeId,
+      quantity: currentQty + quantity,
+    })
+    setAddLine((prev) => ({ ...prev, quantity: '' }))
+  }, [addLine, dispatchState, upsertMatrixChange])
 
   // Matrix dispatch lines — computed once, shared between payload and auto-extras display
   const matrixDispatchLines = useMemo(() => {
@@ -424,34 +513,40 @@ export function DispatchForm({
     return { parcelTotal: listTotal, matrixOrderedTotal: 0, matrixExtraTotal: 0 }
   }, [effectiveView, matrixChanges, entries, availableByCell, openQtyByCell])
 
-  const demandCoverage = useMemo(() => {
-    let noStockCellCount = 0
-    let partialStockCellCount = 0
-    let shortageQty = 0
-
-    for (const [key, openQty] of openQtyByCell.entries()) {
-      if (openQty <= 0) continue
-      const avail = availableByCell.get(key) ?? 0
-      if (avail <= 0) {
-        noStockCellCount += 1
-        shortageQty += openQty
-      } else if (avail < openQty) {
-        partialStockCellCount += 1
-        shortageQty += openQty - avail
-      }
-    }
-
-    return { noStockCellCount, partialStockCellCount, shortageQty }
-  }, [openQtyByCell, availableByCell])
-
-  const overStockCellCount = useMemo(() =>
-    matrixChanges.filter((c) => {
+  const blockingStock = useMemo(() => {
+    let cellCount = 0
+    let excessQty = 0
+    for (const c of matrixChanges) {
+      if (c.quantity <= 0) continue
       const key = `${c.design_id}|${c.colour_id}|${c.size_id}`
       const avail = availableByCell.get(key) ?? 0
-      return c.quantity > avail && avail > 0
-    }).length,
+      if (c.quantity <= avail) continue
+      cellCount += 1
+      excessQty += c.quantity - avail
+    }
+    return { cellCount, excessQty }
+  },
     [matrixChanges, availableByCell],
   )
+
+  const fillerSummary = useMemo(() => {
+    let cellCount = 0
+    let extraSkuCellCount = 0
+    let fillerQty = 0
+
+    for (const c of matrixChanges) {
+      if (c.quantity <= 0) continue
+      const key = `${c.design_id}|${c.colour_id}|${c.size_id}`
+      const openQty = openQtyByCell.get(key) ?? 0
+      const qty = Math.max(0, c.quantity - openQty)
+      if (qty <= 0) continue
+      cellCount += 1
+      fillerQty += qty
+      if (openQty <= 0) extraSkuCellCount += 1
+    }
+
+    return { cellCount, extraSkuCellCount, fillerQty }
+  }, [matrixChanges, openQtyByCell])
 
   const parcelInRange = parcelTotal >= PARCEL_TARGET_MIN && parcelTotal <= PARCEL_TARGET_MAX
   const parcelColor = parcelTotal === 0 ? 'var(--text-secondary)' : parcelInRange ? 'var(--success)' : 'var(--warning)'
@@ -595,32 +690,84 @@ export function DispatchForm({
             Enter dispatch quantities
           </p>
           <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}>
-            Green cells — full order qty ready. Amber cells — partial stock or excess over order qty. Red cells — entered qty cannot be dispatched from ready stock.
-            Quantities distributed FIFO across open order lines.
+            Green cells — ordered qty ready. Orange cells — filler or extra SKU added. Amber cells — partial dispatch. Red cells — cannot dispatch from ready stock.
+            Quantities distribute FIFO across open order lines first.
           </p>
+          <div className="dispatch-add-line">
+            <div className="dispatch-add-line-fields">
+              <label>
+                <span>Design</span>
+                <select
+                  value={addLine.designId}
+                  onChange={(e) => setAddLine((prev) => ({ ...prev, designId: e.target.value }))}
+                >
+                  {designMaster.map((design) => (
+                    <option key={design.id} value={design.id}>{design.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>CLR</span>
+                <select
+                  value={addLine.colourId}
+                  onChange={(e) => setAddLine((prev) => ({ ...prev, colourId: e.target.value }))}
+                >
+                  {colourMaster.map((colour) => (
+                    <option key={colour.id} value={colour.id}>{colour.code}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Size</span>
+                <select
+                  value={addLine.sizeId}
+                  onChange={(e) => setAddLine((prev) => ({ ...prev, sizeId: e.target.value }))}
+                >
+                  {sizeMaster.map((size) => (
+                    <option key={size.id} value={size.id}>{size.code}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Qty</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  value={addLine.quantity}
+                  onChange={(e) => setAddLine((prev) => ({ ...prev, quantity: e.target.value }))}
+                  placeholder="gross"
+                />
+              </label>
+            </div>
+            <button type="button" onClick={handleAddLine} className="dispatch-add-line-button">
+              Add line
+            </button>
+          </div>
           <div className="dispatch-matrix-wrap dispatch-matrix-edit-wrap">
-            {openQtyMatrixData && (
+            {dispatchMatrixFilteredData && (
               <MatrixGrid
-                data={openQtyMatrixData}
+                data={dispatchMatrixFilteredData}
                 mode="edit"
                 onCellChange={handleDispatchCellChange}
                 highlightCell={highlightDispatchCell}
-                draftKey="dispatch-new"
                 compactMobile
               />
             )}
           </div>
-          {demandCoverage.shortageQty > 0 && (
-            <p style={{ fontSize: '0.82rem', color: 'var(--warning)', margin: '0.6rem 0 0', padding: '0.4rem 0.6rem', background: 'var(--warning-subtle)', border: '1px solid var(--warning)', borderRadius: '3px' }}>
-              Order not fully covered: {fmt(demandCoverage.shortageQty)} gross short across{' '}
-              {demandCoverage.noStockCellCount + demandCoverage.partialStockCellCount} cells
-              {demandCoverage.noStockCellCount > 0 ? ` (${demandCoverage.noStockCellCount} with no ready stock)` : ''}
-              {demandCoverage.partialStockCellCount > 0 ? ` (${demandCoverage.partialStockCellCount} partially covered)` : ''}.
+          {fillerSummary.fillerQty > 0 && (
+            <p className="dispatch-message dispatch-message-extra">
+              Extra fillers added: {fmt(fillerSummary.fillerQty)} gross across {fillerSummary.cellCount}{' '}
+              {fillerSummary.cellCount === 1 ? 'cell' : 'cells'}
+              {fillerSummary.extraSkuCellCount > 0
+                ? `, including ${fillerSummary.extraSkuCellCount} extra SKU ${fillerSummary.extraSkuCellCount === 1 ? 'cell' : 'cells'} not in the order`
+                : ''}
+              .
             </p>
           )}
-          {overStockCellCount > 0 && (
-            <p style={{ fontSize: '0.82rem', color: 'var(--danger)', margin: '0.6rem 0 0', padding: '0.4rem 0.6rem', background: 'var(--danger-subtle)', border: '1px solid var(--danger)', borderRadius: '3px' }}>
-              {overStockCellCount} {overStockCellCount === 1 ? 'cell exceeds' : 'cells exceed'} ready stock. Reduce those quantities before confirming.
+          {blockingStock.cellCount > 0 && (
+            <p className="dispatch-message dispatch-message-danger">
+              {blockingStock.cellCount} {blockingStock.cellCount === 1 ? 'cell exceeds' : 'cells exceed'} ready stock by {fmt(blockingStock.excessQty)} gross. Reduce those quantities before confirming.
             </p>
           )}
         </div>
@@ -829,7 +976,7 @@ export function DispatchForm({
       <div className="dispatch-submit-bar">
         <button
           type="submit"
-          disabled={isPending || !hasAnyStock || overStockCellCount > 0 || !!dispatchResult}
+          disabled={isPending || !hasAnyStock || blockingStock.cellCount > 0 || !!dispatchResult}
           style={{ ...btnPrimary, fontWeight: 'bold', marginTop: 0 }}
         >
           {isPending ? 'Saving…' : `Confirm Dispatch — ${customerName}`}
