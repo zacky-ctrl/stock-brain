@@ -127,6 +127,13 @@ export {
 } from './accounting/ledger'
 
 export {
+  calculateCustomerOutstandingFromInvoices,
+  calculateInvoiceReceivables,
+  type InvoiceReceivable,
+  type InvoiceReceivableInput,
+} from './accounting/receipts'
+
+export {
   METRES_PER_BUNDLE,
   recordVelvetReceipt,
   getVelvetStockBalance,

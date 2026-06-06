@@ -1,4 +1,9 @@
 import Link from 'next/link'
+import {
+  calculateCustomerLedgerSummaries,
+  calculateCustomerOutstandingFromInvoices,
+  calculateInvoiceReceivables,
+} from '@stock-brain/domain'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -27,6 +32,30 @@ type ReceiptRow = {
   accounting_journal_entry_id: string | null
   created_at: string
   customers: { name: string; entity_name: string | null } | { name: string; entity_name: string | null }[] | null
+}
+
+type LedgerSummaryInputRow = {
+  id: string
+  customer_id: string
+  entry_date: string
+  created_at: string
+  debit_amount: number | string
+  credit_amount: number | string
+}
+
+type IssuedInvoiceRow = {
+  id: string
+  customer_id: string
+  invoice_number: string | null
+  invoice_date: string
+  due_date: string | null
+  total_amount: number | string
+}
+
+type ReceiptAllocationRow = {
+  sales_invoice_id: string
+  amount_allocated: number | string
+  customer_receipts: { status: string } | { status: string }[] | null
 }
 
 function money(value: number | string): string {
@@ -59,7 +88,12 @@ function statusVariant(status: string): 'success' | 'warning' | 'neutral' | 'dan
 export default async function ReceiptsPage() {
   const supabase = createServerSupabaseClient()
 
-  const [{ data: customersRaw, error: customersError }, { data: receiptsRaw, error: receiptsError }] = await Promise.all([
+  const [
+    { data: customersRaw, error: customersError },
+    { data: receiptsRaw, error: receiptsError },
+    { data: ledgerEntriesRaw },
+    { data: invoicesRaw },
+  ] = await Promise.all([
     supabase
       .from('customers')
       .select('id, name, entity_name')
@@ -87,10 +121,76 @@ export default async function ReceiptsPage() {
       .order('receipt_date', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(100),
+    supabase
+      .from('customer_ledger_entries')
+      .select('id, customer_id, entry_date, created_at, debit_amount, credit_amount')
+      .limit(5000),
+    supabase
+      .from('sales_invoices')
+      .select('id, customer_id, invoice_number, invoice_date, due_date, total_amount')
+      .eq('status', 'issued')
+      .order('invoice_date', { ascending: true })
+      .limit(1000),
   ])
 
   const customers = (customersRaw ?? []) as unknown as CustomerRow[]
   const receipts = (receiptsRaw ?? []) as unknown as ReceiptRow[]
+  const ledgerEntries = (ledgerEntriesRaw ?? []) as unknown as LedgerSummaryInputRow[]
+  const issuedInvoices = (invoicesRaw ?? []) as unknown as IssuedInvoiceRow[]
+  const issuedInvoiceIds = issuedInvoices.map((invoice) => invoice.id)
+  const { data: allocationsRaw } = issuedInvoiceIds.length > 0
+    ? await supabase
+        .from('sales_invoice_receipt_allocations')
+        .select(`
+          sales_invoice_id,
+          amount_allocated,
+          customer_receipts (
+            status
+          )
+        `)
+        .in('sales_invoice_id', issuedInvoiceIds)
+    : { data: [] }
+  const allocations = (allocationsRaw ?? []) as unknown as ReceiptAllocationRow[]
+  const allocatedByInvoice = new Map<string, number>()
+
+  for (const allocation of allocations) {
+    const receipt = resolveRef(allocation.customer_receipts)
+    if (receipt?.status !== 'confirmed') continue
+    allocatedByInvoice.set(
+      allocation.sales_invoice_id,
+      (allocatedByInvoice.get(allocation.sales_invoice_id) ?? 0) + Number(allocation.amount_allocated),
+    )
+  }
+
+  const ledgerSummaries = calculateCustomerLedgerSummaries(
+    ledgerEntries.map((entry) => ({
+      id: entry.id,
+      customerId: entry.customer_id,
+      entryDate: entry.entry_date,
+      createdAt: entry.created_at,
+      debitAmount: Number(entry.debit_amount),
+      creditAmount: Number(entry.credit_amount),
+    })),
+  )
+  const ledgerBalanceByCustomer = new Map(
+    ledgerSummaries.map((summary) => [summary.customerId, summary.balance]),
+  )
+  const invoiceReceivables = calculateInvoiceReceivables(
+    issuedInvoices.map((invoice) => ({
+      invoiceId: invoice.id,
+      customerId: invoice.customer_id,
+      invoiceNumber: invoice.invoice_number,
+      invoiceDate: invoice.invoice_date,
+      dueDate: invoice.due_date,
+      totalAmount: Number(invoice.total_amount),
+      allocatedAmount: allocatedByInvoice.get(invoice.id) ?? 0,
+    })),
+  )
+  const customerOptions = customers.map((customer) => ({
+    ...customer,
+    ledgerBalance: ledgerBalanceByCustomer.get(customer.id) ?? 0,
+    invoiceOutstanding: calculateCustomerOutstandingFromInvoices(invoiceReceivables, customer.id),
+  }))
   const confirmedReceipts = receipts.filter((receipt) => receipt.status === 'confirmed')
   const cashTotal = confirmedReceipts
     .filter((receipt) => receipt.mode === 'cash')
@@ -138,7 +238,11 @@ export default async function ReceiptsPage() {
 
       <Card style={{ marginBottom: '1rem' }}>
         <h2 style={{ margin: '0 0 0.75rem', fontSize: 'var(--text-lg)' }}>Post Customer Receipt</h2>
-        <ReceiptForm customers={customers} defaultReceiptDate={todayInIndia()} />
+        <ReceiptForm
+          customers={customerOptions}
+          invoices={invoiceReceivables}
+          defaultReceiptDate={todayInIndia()}
+        />
       </Card>
 
       <Card>

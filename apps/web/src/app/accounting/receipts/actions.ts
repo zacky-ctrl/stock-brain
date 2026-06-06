@@ -5,6 +5,11 @@ import type { ActionState } from '@/lib/masters'
 import { getActorId } from '@/lib/get-actor'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 
+type ReceiptAllocationInput = {
+  invoice_id: string
+  amount: number
+}
+
 function formString(formData: FormData, key: string): string {
   return ((formData.get(key) as string | null) ?? '').trim()
 }
@@ -19,6 +24,7 @@ export async function postCustomerReceiptAction(
   const mode = formString(formData, 'mode')
   const reference = formString(formData, 'reference') || null
   const notes = formString(formData, 'notes') || null
+  const invoiceIds = formData.getAll('allocation_invoice_id')
 
   if (!customerId) return { error: 'Customer is required' }
   if (!receiptDate) return { error: 'Receipt date is required' }
@@ -32,6 +38,29 @@ export async function postCustomerReceiptAction(
     return { error: 'Receipt mode is invalid' }
   }
 
+  const allocations: ReceiptAllocationInput[] = []
+  for (const rawInvoiceId of invoiceIds) {
+    const invoiceId = String(rawInvoiceId)
+    const allocationAmountInput = formString(formData, `allocation_amount_${invoiceId}`)
+    if (!allocationAmountInput) continue
+
+    const allocationAmount = Number(allocationAmountInput)
+    if (!Number.isFinite(allocationAmount) || allocationAmount < 0) {
+      return { error: 'One of the invoice allocation amounts is invalid' }
+    }
+    if (allocationAmount > 0) {
+      allocations.push({
+        invoice_id: invoiceId,
+        amount: allocationAmount,
+      })
+    }
+  }
+
+  const allocatedTotal = allocations.reduce((total, allocation) => total + allocation.amount, 0)
+  if (allocatedTotal > amount) {
+    return { error: 'Invoice allocation cannot be more than receipt amount' }
+  }
+
   const supabase = createServerSupabaseClient()
   const actor = await getActorId()
 
@@ -43,6 +72,7 @@ export async function postCustomerReceiptAction(
     p_reference: reference,
     p_notes: notes,
     p_actor: actor,
+    p_allocations: allocations,
   } as never)
 
   if (error) return { error: error.message }
