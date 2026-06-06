@@ -133,6 +133,59 @@ const ROLE_SECTIONS: Record<string, string[]> = {
   viewer: ['REPORTS'],
 }
 
+function canAccessHref(role: string | undefined, href: string): boolean {
+  if (!role) return true
+  if (role === 'admin') return true
+
+  if (
+    href.startsWith('/admin') ||
+    href.startsWith('/masters') ||
+    href.startsWith('/health')
+  ) {
+    return false
+  }
+
+  if (href.startsWith('/accounting')) {
+    return role === 'accountant'
+  }
+
+  if (href.startsWith('/planning/allocation')) {
+    return role === 'manager'
+  }
+
+  if (role === 'stock_operator') {
+    return (
+      href.startsWith('/orders') ||
+      href.startsWith('/dispatch') ||
+      href.startsWith('/planning/labour-issue') ||
+      href.startsWith('/planning/cutting-required') ||
+      href.startsWith('/planning/ready') ||
+      href.startsWith('/planning/wip') ||
+      href.startsWith('/operations')
+    )
+  }
+
+  if (role === 'accountant') {
+    return href.startsWith('/reports') || href.startsWith('/accounting')
+  }
+
+  if (role === 'viewer') {
+    return href.startsWith('/reports')
+  }
+
+  if (role === 'manager') {
+    return (
+      href.startsWith('/orders') ||
+      href.startsWith('/dispatch') ||
+      href.startsWith('/planning') ||
+      href.startsWith('/operations') ||
+      href.startsWith('/reports')
+    )
+  }
+
+  return false
+}
+
 function getVisibleSections(role?: string): NavSection[] {
   if (!role) return NAV_SECTIONS
 
@@ -142,12 +195,9 @@ function getVisibleSections(role?: string): NavSection[] {
     .filter((section) => sectionLabels.includes(section.label))
     .map((section) => ({
       ...section,
-      items: role === 'stock_operator' && section.label === 'STOCK'
-        ? section.items.filter((item) =>
-            item.href !== '/planning/allocation' &&
-            item.href !== '/admin/reservations')
-        : section.items,
+      items: section.items.filter((item) => canAccessHref(role, item.href)),
     }))
+    .filter((section) => section.items.length > 0)
 }
 
 export function SidebarNav({ role }: Props) {
@@ -286,23 +336,25 @@ export function SidebarNav({ role }: Props) {
 
         {/* DB Health */}
         <div style={{ borderTop: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-          <Link
-            href="/health/db"
-            title={!isExpanded ? 'DB Health' : undefined}
-            className={`nav-item${isActive('/health/db') ? ' nav-item-active' : ''}`}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.65rem',
-              padding: !isExpanded ? '0.6rem 0' : '0.55rem 1rem',
-              justifyContent: !isExpanded ? 'center' : 'flex-start',
-              fontSize: 'var(--text-xs)',
-              color: 'var(--text-muted)',
-            }}
-          >
-            <Activity size={14} style={{ flexShrink: 0 }} />
-            {isExpanded && 'DB Health'}
-          </Link>
+          {canAccessHref(role, '/health/db') && (
+            <Link
+              href="/health/db"
+              title={!isExpanded ? 'DB Health' : undefined}
+              className={`nav-item${isActive('/health/db') ? ' nav-item-active' : ''}`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.65rem',
+                padding: !isExpanded ? '0.6rem 0' : '0.55rem 1rem',
+                justifyContent: !isExpanded ? 'center' : 'flex-start',
+                fontSize: 'var(--text-xs)',
+                color: 'var(--text-muted)',
+              }}
+            >
+              <Activity size={14} style={{ flexShrink: 0 }} />
+              {isExpanded && 'DB Health'}
+            </Link>
+          )}
 
           {/* Theme toggle */}
           <div

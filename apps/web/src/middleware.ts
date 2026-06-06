@@ -72,7 +72,7 @@ export async function middleware(request: NextRequest) {
 
   const role = roles[0]?.role as string | undefined
 
-  const adminPrefixes = ['/admin', '/masters']
+  const adminPrefixes = ['/admin', '/masters', '/health']
   if (adminPrefixes.some(p => pathname.startsWith(p)) && role !== 'admin') {
     return NextResponse.redirect(new URL('/', request.url))
   }
