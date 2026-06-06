@@ -240,7 +240,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const primaryDispatch = resolveRef(dispatchLinks[0]?.dispatch_events)
   const { groups: printMatrixGroups, sizeCodes: printSizeCodes } = buildPrintMatrixGroups(lines)
   const rateSummary = buildRateSummary(lines)
-  const sizeColumnWidth = `${72 / Math.max(printSizeCodes.length, 1)}%`
+  const matrixGridStyle = {
+    gridTemplateColumns: `13% 7% repeat(${Math.max(printSizeCodes.length, 1)}, minmax(0, 1fr)) 8%`,
+  }
+  const rateSummaryGridStyle = {
+    gridTemplateColumns: '1.15fr 0.7fr 1fr 1.15fr',
+  }
 
   return (
     <main style={{ padding: '1.5rem 2rem', maxWidth: '1200px' }}>
@@ -436,7 +441,9 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             {invoice.entity_name_snapshot && <p>{invoice.entity_name_snapshot}</p>}
             {invoice.address_snapshot && <p>{invoice.address_snapshot}</p>}
             {invoice.phone_snapshot && <p>Phone: {invoice.phone_snapshot}</p>}
-            {invoice.transport_name_snapshot && <p>Transport: {invoice.transport_name_snapshot}</p>}
+            {invoice.transport_name_snapshot && (
+              <p className="invoice-print-transport-line">Transport: <strong>{invoice.transport_name_snapshot}</strong></p>
+            )}
           </div>
           <div>
             <div className="invoice-print-label">Invoice Details</div>
@@ -449,6 +456,25 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           </div>
         </section>
 
+        <section className="invoice-print-highlight">
+          <div>
+            <span>Customer</span>
+            <strong>{invoice.customer_name_snapshot}</strong>
+          </div>
+          <div>
+            <span>Entity / Hindi name</span>
+            <strong>{invoice.entity_name_snapshot ?? '-'}</strong>
+          </div>
+          <div className="invoice-print-highlight-transport">
+            <span>Transport</span>
+            <strong>{invoice.transport_name_snapshot ?? '-'}</strong>
+          </div>
+          <div>
+            <span>Address</span>
+            <strong>{invoice.address_snapshot ?? '-'}</strong>
+          </div>
+        </section>
+
         <section className="invoice-print-section">
           <h3>SKU Quantity Matrix</h3>
           {printMatrixGroups.map((group) => (
@@ -457,36 +483,24 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 <span>{group.title}</span>
                 <strong>{qty(group.total)} gross</strong>
               </div>
-              <table className="invoice-print-matrix-table">
-                <colgroup>
-                  <col style={{ width: '13%' }} />
-                  <col style={{ width: '7%' }} />
-                  {printSizeCodes.map((sizeCode) => (
-                    <col key={sizeCode} style={{ width: sizeColumnWidth }} />
-                  ))}
-                  <col style={{ width: '8%' }} />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th>Shape</th>
-                    <th>CLR</th>
-                    {printSizeCodes.map((sizeCode) => <th key={sizeCode}>{sizeCode}</th>)}
-                    <th>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {group.rows.map((row) => (
-                    <tr key={row.rowKey}>
-                      <td>{row.shape}</td>
-                      <td>{row.colour}</td>
-                      {printSizeCodes.map((sizeCode) => (
-                        <td key={sizeCode}>{row.quantities.has(sizeCode) ? qty(row.quantities.get(sizeCode) ?? 0) : ''}</td>
-                      ))}
-                      <td>{qty(row.total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="invoice-print-matrix-grid">
+                <div className="invoice-print-matrix-row invoice-print-matrix-head" style={matrixGridStyle}>
+                  <div>Shape</div>
+                  <div>CLR</div>
+                  {printSizeCodes.map((sizeCode) => <div key={sizeCode}>{sizeCode}</div>)}
+                  <div>Total</div>
+                </div>
+                {group.rows.map((row) => (
+                  <div key={row.rowKey} className="invoice-print-matrix-row" style={matrixGridStyle}>
+                    <div className="invoice-print-shape-cell">{row.shape}</div>
+                    <div>{row.colour}</div>
+                    {printSizeCodes.map((sizeCode) => (
+                      <div key={sizeCode}>{row.quantities.has(sizeCode) ? qty(row.quantities.get(sizeCode) ?? 0) : ''}</div>
+                    ))}
+                    <div className="invoice-print-total-cell">{qty(row.total)}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </section>
@@ -494,26 +508,22 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         <section className="invoice-print-bottom">
           <div>
             <h3>Rate Summary</h3>
-            <table className="invoice-print-summary-table">
-              <thead>
-                <tr>
-                  <th>Dabbi</th>
-                  <th>Gross</th>
-                  <th>Rate / Gross</th>
-                  <th>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rateSummary.map((row) => (
-                  <tr key={row.rateKind}>
-                    <td>{row.rateKind.toUpperCase()}</td>
-                    <td>{qty(row.gross)}</td>
-                    <td>{money(row.rate)}</td>
-                    <td>{money(row.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="invoice-print-rate-grid">
+              <div className="invoice-print-rate-row invoice-print-rate-head" style={rateSummaryGridStyle}>
+                <div>Dabbi</div>
+                <div>Gross</div>
+                <div>Rate / Gross</div>
+                <div>Amount</div>
+              </div>
+              {rateSummary.map((row) => (
+                <div key={row.rateKind} className="invoice-print-rate-row" style={rateSummaryGridStyle}>
+                  <div>{row.rateKind.toUpperCase()}</div>
+                  <div>{qty(row.gross)}</div>
+                  <div>{money(row.rate)}</div>
+                  <div>{money(row.amount)}</div>
+                </div>
+              ))}
+            </div>
             {invoice.notes && (
               <p className="invoice-print-notes"><strong>Notes:</strong> {invoice.notes}</p>
             )}
@@ -635,6 +645,15 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             margin: 0 0 1mm;
           }
 
+          .invoice-print-transport-line {
+            display: inline-block;
+            margin-top: 1.5mm !important;
+            padding: 1.5mm 2mm;
+            border: 1px solid #111;
+            background: #fff3bf !important;
+            font-weight: 700;
+          }
+
           .invoice-print-parties dl {
             margin: 1.5mm 0 0;
             display: grid;
@@ -644,6 +663,45 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           .invoice-print-parties dd {
             margin: 0;
             font-weight: 700;
+          }
+
+          .invoice-print-highlight {
+            display: grid;
+            grid-template-columns: 1.1fr 1fr 1fr;
+            gap: 2mm;
+            border: 2px solid #111;
+            background: #f6f6f6 !important;
+            padding: 3mm;
+            margin-bottom: 5mm;
+            break-inside: avoid;
+          }
+
+          .invoice-print-highlight > div {
+            display: grid;
+            gap: 1mm;
+            min-width: 0;
+          }
+
+          .invoice-print-highlight > div:last-child {
+            grid-column: 1 / -1;
+          }
+
+          .invoice-print-highlight span {
+            color: #444;
+            font-size: 7.4pt;
+            font-weight: 800;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+          }
+
+          .invoice-print-highlight strong {
+            font-size: 10pt;
+          }
+
+          .invoice-print-highlight-transport {
+            border: 1px solid #111;
+            background: #fff3bf !important;
+            padding: 2mm;
           }
 
           .invoice-print-section h3,
@@ -670,51 +728,53 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             font-weight: 800;
           }
 
-          .invoice-print-matrix-table,
-          .invoice-print-summary-table {
-            width: 100%;
-            border-collapse: collapse;
-            table-layout: fixed;
+          .invoice-print-matrix-grid,
+          .invoice-print-rate-grid {
+            border-top: 1px solid #111;
+            border-left: 1px solid #111;
           }
 
-          .invoice-print-matrix-table th,
-          .invoice-print-matrix-table td,
-          .invoice-print-summary-table th,
-          .invoice-print-summary-table td {
+          .invoice-print-matrix-row,
+          .invoice-print-rate-row {
+            display: grid;
+          }
+
+          .invoice-print-matrix-row > div,
+          .invoice-print-rate-row > div {
             border: 1px solid #111 !important;
+            border-top: 0 !important;
+            border-left: 0 !important;
             padding: 1.8mm 1.4mm !important;
             background: #fff !important;
             color: #111 !important;
             font-size: 8pt;
+            min-width: 0;
+            box-sizing: border-box;
           }
 
-          .invoice-print-matrix-table th,
-          .invoice-print-summary-table th {
+          .invoice-print-matrix-head > div,
+          .invoice-print-rate-head > div {
             background: #f2f2f2 !important;
             font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 0.04em;
           }
 
-          .invoice-print-matrix-table th:first-child,
-          .invoice-print-matrix-table td:first-child {
+          .invoice-print-matrix-row > div:first-child {
             text-align: left;
             font-weight: 700;
           }
 
-          .invoice-print-matrix-table th:nth-child(2),
-          .invoice-print-matrix-table td:nth-child(2) {
+          .invoice-print-matrix-row > div:nth-child(2) {
             text-align: center;
             font-weight: 700;
           }
 
-          .invoice-print-matrix-table th:not(:first-child):not(:nth-child(2)),
-          .invoice-print-matrix-table td:not(:first-child):not(:nth-child(2)) {
+          .invoice-print-matrix-row > div:not(:first-child):not(:nth-child(2)) {
             text-align: center;
           }
 
-          .invoice-print-matrix-table th:last-child,
-          .invoice-print-matrix-table td:last-child {
+          .invoice-print-total-cell {
             font-weight: 800;
           }
 
@@ -727,13 +787,11 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             break-inside: avoid;
           }
 
-          .invoice-print-summary-table th,
-          .invoice-print-summary-table td {
+          .invoice-print-rate-row > div {
             text-align: right;
           }
 
-          .invoice-print-summary-table th:first-child,
-          .invoice-print-summary-table td:first-child {
+          .invoice-print-rate-row > div:first-child {
             text-align: left;
           }
 
