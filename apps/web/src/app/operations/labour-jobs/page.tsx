@@ -11,7 +11,7 @@ export default async function LabourJobsPage() {
   const { data, error } = await supabase
     .from('labour_jobs')
     .select(`
-      id, date_assigned, expected_return_date, actual_return_date, status, notes, created_at,
+      id, date_assigned, expected_return_date, actual_return_date, status, notes, created_at, labour_unit_id,
       labour_units(name, serial_number),
       labour_job_lines(quantity_sent_gross, quantity_returned_gross)
     `)

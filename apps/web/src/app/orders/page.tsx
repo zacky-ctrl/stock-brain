@@ -6,7 +6,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { ShoppingCart } from 'lucide-react'
 import Link from 'next/link'
 import { OrdersClient } from './OrdersClient'
-import type { OrderClientRow, ReservableLine, OrderPlanningRow, OrderPlanningSum } from './OrdersClient'
+import type { OrderClientRow, ReservableLine, OrderPlanningRow, OrderPlanningSum, PortfolioDispatchEvent } from './OrdersClient'
 
 // ── raw DB types ───────────────────────────────────────────────
 
@@ -99,31 +99,75 @@ export default async function OrdersPage() {
     }
   }
 
-  // ── Phase 2b: extras per order (via dispatch_events.order_id) ─
+  // ── Phase 2b: dispatch events per order (extras + portfolio data) ─
   const orderIds = orders.map((o) => o.id)
   const extrasByOrderId = new Map<string, number>()
+  const portfolioEventsByOrderId = new Map<string, PortfolioDispatchEvent[]>()
+  const firstDispatchByOrderId = new Map<string, string>()
 
   if (orderIds.length > 0) {
     const { data: orderEventsData } = await supabase
       .from('dispatch_events')
-      .select('id, order_id')
+      .select('id, order_id, dispatch_date, reference, status')
       .in('order_id', orderIds)
-      .eq('status', 'confirmed')
 
-    const orderEventIds = (orderEventsData ?? []).map((e) => e.id as string)
-    const eventToOrder = new Map<string, string>()
-    for (const e of orderEventsData ?? []) eventToOrder.set(e.id as string, e.order_id as string)
+    const allOrderEventIds = (orderEventsData ?? []).map((e) => e.id as string)
+    const confirmedOrderEventIds = (orderEventsData ?? [])
+      .filter((e) => (e.status as string) === 'confirmed')
+      .map((e) => e.id as string)
 
-    if (orderEventIds.length > 0) {
-      const { data: extraLines } = await supabase
+    type EventMeta = { order_id: string; dispatch_date: string; reference: string | null; status: string }
+    const eventMeta = new Map<string, EventMeta>()
+    for (const e of orderEventsData ?? []) {
+      eventMeta.set(e.id as string, {
+        order_id: e.order_id as string,
+        dispatch_date: e.dispatch_date as string,
+        reference: e.reference as string | null,
+        status: e.status as string,
+      })
+    }
+
+    if (allOrderEventIds.length > 0) {
+      // Fetch all lines for all events (used for portfolio gross + extras)
+      const { data: allEventLines } = await supabase
         .from('dispatch_lines')
-        .select('dispatch_event_id, quantity_dispatched')
-        .in('dispatch_event_id', orderEventIds)
-        .eq('line_type', 'extra')
+        .select('dispatch_event_id, quantity_dispatched, line_type')
+        .in('dispatch_event_id', allOrderEventIds)
 
-      for (const el of extraLines ?? []) {
-        const oid = eventToOrder.get(el.dispatch_event_id as string)
-        if (oid) extrasByOrderId.set(oid, (extrasByOrderId.get(oid) ?? 0) + Number(el.quantity_dispatched))
+      // Gross per event for portfolio display
+      const grossByEventId = new Map<string, number>()
+      for (const l of allEventLines ?? []) {
+        const evId = l.dispatch_event_id as string
+        grossByEventId.set(evId, (grossByEventId.get(evId) ?? 0) + Number(l.quantity_dispatched))
+      }
+
+      // Extras (confirmed only) for total_extras on each order
+      for (const l of allEventLines ?? []) {
+        const evId = l.dispatch_event_id as string
+        if ((l.line_type as string) !== 'extra') continue
+        if (!confirmedOrderEventIds.includes(evId)) continue
+        const oid = eventMeta.get(evId)?.order_id
+        if (oid) extrasByOrderId.set(oid, (extrasByOrderId.get(oid) ?? 0) + Number(l.quantity_dispatched))
+      }
+
+      // Build portfolio events and first dispatch date per order
+      for (const [evId, meta] of eventMeta) {
+        const gross = grossByEventId.get(evId) ?? 0
+        const list = portfolioEventsByOrderId.get(meta.order_id) ?? []
+        list.push({ event_id: evId, dispatch_date: meta.dispatch_date, gross, reference: meta.reference, status: meta.status })
+        portfolioEventsByOrderId.set(meta.order_id, list)
+
+        if (meta.status === 'confirmed') {
+          const existing = firstDispatchByOrderId.get(meta.order_id)
+          if (!existing || meta.dispatch_date < existing) {
+            firstDispatchByOrderId.set(meta.order_id, meta.dispatch_date)
+          }
+        }
+      }
+
+      // Sort events within each order by date ascending
+      for (const events of portfolioEventsByOrderId.values()) {
+        events.sort((a, b) => a.dispatch_date.localeCompare(b.dispatch_date))
       }
     }
   }
@@ -235,6 +279,8 @@ export default async function OrdersPage() {
       planning_rows: orderEngineRows,
       planning_sum,
       reservable_lines: reservableLines,
+      first_dispatch_date: firstDispatchByOrderId.get(order.id) ?? null,
+      dispatch_events_portfolio: portfolioEventsByOrderId.get(order.id) ?? [],
     }
   })
 

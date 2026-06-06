@@ -4,13 +4,22 @@ import { useState, useMemo, useActionState } from 'react'
 import { setOrderPriorityAction, reserveOrderLinesAction } from './actions'
 import { inputStyle, btnPrimary, msgError, msgOk, fieldWrap } from '@/lib/ui'
 import { Badge, statusBadgeVariant } from '@/components/ui/Badge'
-import { Filter, MoreHorizontal, X } from 'lucide-react'
+import { Filter, MoreHorizontal, X, List, BarChart2 } from 'lucide-react'
 import Link from 'next/link'
 import type { CSSProperties } from 'react'
 import type { ActionState } from '@/lib/masters'
 import type { PlanningAllocationRow } from '@stock-brain/types'
+import { CustomerPortfolioView } from './CustomerPortfolioView'
 
 // ── types ──────────────────────────────────────────────────────
+
+export type PortfolioDispatchEvent = {
+  event_id: string
+  dispatch_date: string
+  gross: number
+  reference: string | null
+  status: string
+}
 
 export type ReservableLine = {
   line_id: string
@@ -58,6 +67,8 @@ export type OrderClientRow = {
   planning_rows: OrderPlanningRow[]
   planning_sum: OrderPlanningSum
   reservable_lines: ReservableLine[]
+  first_dispatch_date: string | null
+  dispatch_events_portfolio: PortfolioDispatchEvent[]
 }
 
 // ── helpers ────────────────────────────────────────────────────
@@ -441,6 +452,7 @@ export function OrdersClient({
   sizeMap: Record<string, string>
   dabbiMap: Record<string, string>
 }) {
+  const [view, setView] = useState<'list' | 'portfolio'>('list')
   const [customer, setCustomer] = useState('')
   const [status, setStatus] = useState('')
   const [dateFrom, setDateFrom] = useState('')
@@ -517,8 +529,37 @@ export function OrdersClient({
     width: '130px',
   }
 
+  const viewToggleBtn = (active: boolean): CSSProperties => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '0.35rem',
+    padding: '0.3rem 0.75rem',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 600,
+    cursor: 'pointer',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    background: active ? 'var(--accent)' : 'var(--bg-elevated)',
+    color: active ? 'white' : 'var(--text-secondary)',
+  })
+
   return (
     <>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+        <button type="button" style={viewToggleBtn(view === 'list')} onClick={() => setView('list')}>
+          <List size={14} /> List
+        </button>
+        <button type="button" style={viewToggleBtn(view === 'portfolio')} onClick={() => setView('portfolio')}>
+          <BarChart2 size={14} /> Portfolio
+        </button>
+      </div>
+
+      {view === 'portfolio' && (
+        <CustomerPortfolioView orders={orders} />
+      )}
+
+      {view === 'list' && (
+      <>
       <section className="orders-filter-shell">
         <div className="orders-filter-summary">
           <button
@@ -618,6 +659,8 @@ export function OrdersClient({
           </div>
         )}
       </div>
+      </>
+      )}
     </>
   )
 }

@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/Badge'
 import type { BadgeVariant } from '@/components/ui/Badge'
 import Link from 'next/link'
 import type { CSSProperties } from 'react'
+import { List, BarChart2 } from 'lucide-react'
+import { LabourPortfolioView } from './LabourPortfolioView'
 
 export type JobRow = {
   id: string
@@ -15,6 +17,7 @@ export type JobRow = {
   status: string
   notes: string | null
   created_at: string
+  labour_unit_id: string | null
   labour_units: { name: string; serial_number: number } | null
   labour_job_lines: { quantity_sent_gross: string | number; quantity_returned_gross: string | number }[]
 }
@@ -162,7 +165,22 @@ function JobCard({ job }: { job: JobRow }) {
   )
 }
 
+const viewToggleBtn = (active: boolean): CSSProperties => ({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.35rem',
+  padding: '0.3rem 0.75rem',
+  fontSize: 'var(--text-xs)',
+  fontWeight: 600,
+  cursor: 'pointer',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-sm)',
+  background: active ? 'var(--accent)' : 'var(--bg-elevated)',
+  color: active ? 'white' : 'var(--text-secondary)',
+})
+
 export function LabourJobsClient({ jobs }: { jobs: JobRow[] }) {
+  const [view, setView] = useState<'list' | 'portfolio'>('list')
   const [unitFilter, setUnitFilter]       = useState('')
   const [assignedFrom, setAssignedFrom]   = useState('')
   const [dueBy, setDueBy]                 = useState('')
@@ -209,6 +227,19 @@ export function LabourJobsClient({ jobs }: { jobs: JobRow[] }) {
 
   return (
     <>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+        <button type="button" style={viewToggleBtn(view === 'list')} onClick={() => setView('list')}>
+          <List size={14} /> List
+        </button>
+        <button type="button" style={viewToggleBtn(view === 'portfolio')} onClick={() => setView('portfolio')}>
+          <BarChart2 size={14} /> Portfolio
+        </button>
+      </div>
+
+      {view === 'portfolio' && <LabourPortfolioView jobs={jobs} />}
+
+      {view === 'list' && (
+      <>
       {/* Filter bar */}
       <div className="labour-jobs-filter" style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '1rem', padding: '0.75rem 1rem', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
         <div className="labour-jobs-filter-field" style={filterGroupStyle}>
@@ -351,6 +382,8 @@ export function LabourJobsClient({ jobs }: { jobs: JobRow[] }) {
           </table>
         </div>
         </>
+      )}
+      </>
       )}
     </>
   )
