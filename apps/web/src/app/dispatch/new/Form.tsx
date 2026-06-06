@@ -129,6 +129,7 @@ export function DispatchForm({
   const today = new Date().toISOString().split('T')[0]
   const [view, setView] = useState<'list' | 'matrix'>('matrix')
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({})
+  const [showAvailableStock, setShowAvailableStock] = useState(false)
   const dispatchResult = state && 'dispatch_id' in state ? state : null
 
   const [entries, setEntries] = useState<OrderedLineState[]>(
@@ -455,7 +456,8 @@ export function DispatchForm({
   const parcelInRange = parcelTotal >= PARCEL_TARGET_MIN && parcelTotal <= PARCEL_TARGET_MAX
   const parcelColor = parcelTotal === 0 ? 'var(--text-secondary)' : parcelInRange ? 'var(--success)' : 'var(--warning)'
 
-  const hasAnyStock = openLines.some((l) => l.stock_options.length > 0)
+  const hasAnyStock = availableStockRows.length > 0
+  const availableStockTotal = availableStockRows.reduce((sum, row) => sum + row.available_qty, 0)
 
   useEffect(() => {
     if (!dispatchResult) return
@@ -565,11 +567,28 @@ export function DispatchForm({
             activeFilters={activeFilters}
             onFilterChange={setActiveFilters}
           />
-          <p style={{ fontSize: '0.82rem', fontWeight: 'bold', marginBottom: '0.35rem' }}>
-            Available ready stock (reference)
-          </p>
-          <div className="dispatch-matrix-wrap">
-            {availStockMatrixData && <MatrixGrid data={availStockMatrixData} mode="view" compactMobile />}
+          <div className="dispatch-stock-reference">
+            <button
+              type="button"
+              className="dispatch-stock-reference-toggle"
+              onClick={() => setShowAvailableStock((prev) => !prev)}
+              aria-expanded={showAvailableStock}
+            >
+              <span>{showAvailableStock ? 'Hide' : 'Show'} available ready stock</span>
+              <span className="dispatch-stock-reference-meta">
+                {availableStockRows.length} SKUs / {fmt(availableStockTotal)} gross
+              </span>
+            </button>
+            {showAvailableStock && (
+              <div className="dispatch-stock-reference-panel">
+                <p style={{ fontSize: '0.82rem', fontWeight: 'bold', marginBottom: '0.35rem' }}>
+                  Available ready stock
+                </p>
+                <div className="dispatch-matrix-wrap">
+                  {availStockMatrixData && <MatrixGrid data={availStockMatrixData} mode="view" compactMobile />}
+                </div>
+              </div>
+            )}
           </div>
 
           <p style={{ fontSize: '0.82rem', fontWeight: 'bold', marginBottom: '0.35rem' }}>
@@ -593,7 +612,7 @@ export function DispatchForm({
           </div>
           {demandCoverage.shortageQty > 0 && (
             <p style={{ fontSize: '0.82rem', color: 'var(--warning)', margin: '0.6rem 0 0', padding: '0.4rem 0.6rem', background: 'var(--warning-subtle)', border: '1px solid var(--warning)', borderRadius: '3px' }}>
-              Ready stock shortage: {fmt(demandCoverage.shortageQty)} gross across{' '}
+              Order not fully covered: {fmt(demandCoverage.shortageQty)} gross short across{' '}
               {demandCoverage.noStockCellCount + demandCoverage.partialStockCellCount} cells
               {demandCoverage.noStockCellCount > 0 ? ` (${demandCoverage.noStockCellCount} with no ready stock)` : ''}
               {demandCoverage.partialStockCellCount > 0 ? ` (${demandCoverage.partialStockCellCount} partially covered)` : ''}.
