@@ -1,17 +1,24 @@
 'use client'
 
 import { useActionState } from 'react'
-import { ReceiptText } from 'lucide-react'
+import { Save } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import type { ActionState } from '@/lib/masters'
-import { createDraftInvoiceFromDispatchAction } from './actions'
+import { updateDraftInvoiceAction } from './actions'
 
 type Props = {
-  dispatchId: string
-  defaultInvoiceDate: string
-  defaultYellowRate?: number | string | null
-  defaultWhiteRate?: number | string | null
-  defaultTransportCharges?: number
+  invoice: {
+    id: string
+    invoice_date: string
+    due_date: string | null
+    yellow_rate_per_gross: number | string | null
+    white_rate_per_gross: number | string | null
+    transport_charges: number | string
+    other_charges: number | string
+    discount_amount: number | string
+    round_off_amount: number | string
+    notes: string | null
+  }
 }
 
 const fieldStyle = {
@@ -25,21 +32,15 @@ const inputStyle = {
   minHeight: '2.5rem',
 } as const
 
-export function CreateDraftInvoiceForm({
-  dispatchId,
-  defaultInvoiceDate,
-  defaultYellowRate,
-  defaultWhiteRate,
-  defaultTransportCharges = 0,
-}: Props) {
+export function EditDraftInvoiceForm({ invoice }: Props) {
   const [state, formAction, isPending] = useActionState<ActionState, FormData>(
-    createDraftInvoiceFromDispatchAction,
+    updateDraftInvoiceAction,
     null,
   )
 
   return (
     <form action={formAction} style={{ display: 'grid', gap: '0.9rem' }}>
-      <input type="hidden" name="dispatch_id" value={dispatchId} />
+      <input type="hidden" name="invoice_id" value={invoice.id} />
       <div
         style={{
           display: 'grid',
@@ -51,13 +52,13 @@ export function CreateDraftInvoiceForm({
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 700 }}>
             Invoice Date
           </span>
-          <input name="invoice_date" type="date" defaultValue={defaultInvoiceDate} required style={inputStyle} />
+          <input name="invoice_date" type="date" defaultValue={invoice.invoice_date} required style={inputStyle} />
         </label>
         <label style={fieldStyle}>
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 700 }}>
             Due Date
           </span>
-          <input name="due_date" type="date" style={inputStyle} />
+          <input name="due_date" type="date" defaultValue={invoice.due_date ?? ''} style={inputStyle} />
         </label>
         <label style={fieldStyle}>
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 700 }}>
@@ -68,7 +69,8 @@ export function CreateDraftInvoiceForm({
             type="number"
             step="0.01"
             min="0"
-            defaultValue={defaultYellowRate ?? ''}
+            defaultValue={invoice.yellow_rate_per_gross ?? ''}
+            required
             style={inputStyle}
           />
         </label>
@@ -81,7 +83,8 @@ export function CreateDraftInvoiceForm({
             type="number"
             step="0.01"
             min="0"
-            defaultValue={defaultWhiteRate ?? ''}
+            defaultValue={invoice.white_rate_per_gross ?? ''}
+            required
             style={inputStyle}
           />
         </label>
@@ -89,47 +92,50 @@ export function CreateDraftInvoiceForm({
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 700 }}>
             Transport
           </span>
-          <input
-            name="transport_charges"
-            type="number"
-            step="0.01"
-            min="0"
-            defaultValue={defaultTransportCharges || ''}
-            style={inputStyle}
-          />
+          <input name="transport_charges" type="number" step="0.01" min="0" defaultValue={invoice.transport_charges} style={inputStyle} />
         </label>
         <label style={fieldStyle}>
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 700 }}>
             Manual Addition / Correction
           </span>
-          <input name="other_charges" type="number" step="0.01" min="0" style={inputStyle} />
+          <input name="other_charges" type="number" step="0.01" min="0" defaultValue={invoice.other_charges} style={inputStyle} />
         </label>
         <label style={fieldStyle}>
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 700 }}>
             Discount
           </span>
-          <input name="discount_amount" type="number" step="0.01" min="0" style={inputStyle} />
+          <input name="discount_amount" type="number" step="0.01" min="0" defaultValue={invoice.discount_amount} style={inputStyle} />
         </label>
         <label style={fieldStyle}>
           <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 700 }}>
             Round Off
           </span>
-          <input name="round_off_amount" type="number" step="0.01" style={inputStyle} />
+          <input name="round_off_amount" type="number" step="0.01" defaultValue={invoice.round_off_amount} style={inputStyle} />
         </label>
       </div>
       <label style={fieldStyle}>
         <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 700 }}>
-          Notes
+          Notes / Reason
         </span>
-        <input name="notes" placeholder="Invoice review note" style={inputStyle} />
+        <input
+          name="notes"
+          defaultValue={invoice.notes ?? ''}
+          placeholder="Why rates or amount were changed"
+          style={inputStyle}
+        />
       </label>
       {state && 'error' in state && (
         <p style={{ margin: 0, color: 'var(--danger)', fontSize: 'var(--text-sm)', fontWeight: 700 }}>
           {state.error}
         </p>
       )}
-      <Button type="submit" variant="primary" icon={ReceiptText} loading={isPending} style={{ justifySelf: 'start' }}>
-        Create Draft Invoice
+      {state && 'success' in state && (
+        <p style={{ margin: 0, color: 'var(--success-bright)', fontSize: 'var(--text-sm)', fontWeight: 700 }}>
+          {state.success}
+        </p>
+      )}
+      <Button type="submit" variant="secondary" icon={Save} loading={isPending} style={{ justifySelf: 'start' }}>
+        Save Draft Changes
       </Button>
     </form>
   )

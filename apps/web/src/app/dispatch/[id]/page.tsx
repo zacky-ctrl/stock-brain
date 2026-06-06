@@ -10,7 +10,6 @@ import { Card } from '@/components/ui/Card'
 import { PrintButton } from '@/components/ui/PrintButton'
 import type { CSSProperties } from 'react'
 import Link from 'next/link'
-import { CreateDraftInvoiceForm } from '@/app/accounting/invoices/CreateDraftInvoiceForm'
 
 function fmt(n: number): string {
   return n % 1 === 0 ? String(n) : n.toFixed(3)
@@ -255,18 +254,6 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
           </div>
         </div>
       </Card>
-
-      {(event as { status: string }).status === 'confirmed' && !invoiceId && (
-        <Card style={{ marginBottom: '1.5rem' }}>
-          <h3 style={{ margin: '0 0 0.35rem', fontSize: 'var(--text-base)' }}>
-            Create Draft Invoice
-          </h3>
-          <p style={{ margin: '0 0 1rem', color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
-            Uses customer yellow/white rates per gross and this challan's actual dispatched quantities.
-          </p>
-          <CreateDraftInvoiceForm dispatchId={id} defaultInvoiceDate={dispatchDate} />
-        </Card>
-      )}
 
       {extrasQty > 0 && (
         <div style={{ padding: '0.6rem 0.9rem', marginBottom: '1.5rem', background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 'var(--radius-sm)', fontSize: '0.82rem', color: 'var(--info)' }}>

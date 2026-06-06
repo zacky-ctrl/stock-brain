@@ -90,6 +90,17 @@ type SalesInvoiceLineInsert = {
   line_amount: number
 }
 
+type DraftInvoiceUpdateRow = {
+  id: string
+  status: string
+}
+
+type DraftInvoiceLineRow = {
+  id: string
+  dabbi_colour_code_snapshot: string
+  quantity_gross: number | string
+}
+
 function resolveRef<T>(raw: T | T[] | null | undefined): T | null {
   if (!raw) return null
   return Array.isArray(raw) ? raw[0] ?? null : raw
@@ -138,6 +149,8 @@ export async function createDraftInvoiceFromDispatchAction(
   const dispatchId = formString(formData, 'dispatch_id')
   const invoiceDate = formString(formData, 'invoice_date')
   const dueDateInput = formString(formData, 'due_date')
+  const yellowRateInput = formString(formData, 'yellow_rate_per_gross')
+  const whiteRateInput = formString(formData, 'white_rate_per_gross')
   const transportCharges = optionalMoney(formData, 'transport_charges')
   const otherCharges = optionalMoney(formData, 'other_charges')
   const discountAmount = optionalMoney(formData, 'discount_amount')
@@ -200,9 +213,16 @@ export async function createDraftInvoiceFromDispatchAction(
     const customer = resolveRef(event.customers)
     if (!customer) return { error: 'Customer not found for this dispatch' }
 
-    const yellowRate = numberOrNull(customer.yellow_rate_per_gross)
-    const whiteRate = numberOrNull(customer.white_rate_per_gross)
+    const yellowRate = yellowRateInput ? Number(yellowRateInput) : numberOrNull(customer.yellow_rate_per_gross)
+    const whiteRate = whiteRateInput ? Number(whiteRateInput) : numberOrNull(customer.white_rate_per_gross)
     const termsDays = numberOrNull(customer.payment_terms_days) ?? 0
+
+    if (yellowRate !== null && (!Number.isFinite(yellowRate) || yellowRate < 0)) {
+      return { error: 'Yellow rate is invalid' }
+    }
+    if (whiteRate !== null && (!Number.isFinite(whiteRate) || whiteRate < 0)) {
+      return { error: 'White rate is invalid' }
+    }
 
     const { data: dispatchLinesRaw, error: linesError } = await supabase
       .from('dispatch_lines')
@@ -388,4 +408,113 @@ export async function issueInvoiceAction(
   revalidatePath(`/accounting/invoices/${invoiceId}`)
   revalidatePath('/dispatch')
   redirect(`/accounting/invoices/${invoiceId}`)
+}
+
+export async function updateDraftInvoiceAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const invoiceId = formString(formData, 'invoice_id')
+  const invoiceDate = formString(formData, 'invoice_date')
+  const dueDate = nullableDate(formString(formData, 'due_date'))
+  const yellowRate = numberOrNull(formString(formData, 'yellow_rate_per_gross'))
+  const whiteRate = numberOrNull(formString(formData, 'white_rate_per_gross'))
+  const transportCharges = optionalMoney(formData, 'transport_charges')
+  const otherCharges = optionalMoney(formData, 'other_charges')
+  const discountAmount = optionalMoney(formData, 'discount_amount')
+  const roundOffAmount = optionalMoney(formData, 'round_off_amount')
+  const notes = formString(formData, 'notes') || null
+
+  if (!invoiceId) return { error: 'Invoice is required' }
+  if (!invoiceDate) return { error: 'Invoice date is required' }
+  if (yellowRate === null || yellowRate < 0) return { error: 'Yellow rate is required' }
+  if (whiteRate === null || whiteRate < 0) return { error: 'White rate is required' }
+
+  const moneyValues = [transportCharges, otherCharges, discountAmount, roundOffAmount]
+  if (moneyValues.some((value) => !Number.isFinite(value))) {
+    return { error: 'One of the amount fields is invalid' }
+  }
+
+  const supabase = createServerSupabaseClient()
+
+  const { data: invoiceRaw, error: invoiceError } = await supabase
+    .from('sales_invoices')
+    .select('id, status')
+    .eq('id', invoiceId)
+    .single()
+
+  if (invoiceError || !invoiceRaw) return { error: invoiceError?.message ?? 'Invoice not found' }
+
+  const draftInvoice = invoiceRaw as unknown as DraftInvoiceUpdateRow
+  if (draftInvoice.status !== 'draft') {
+    return { error: 'Only draft invoices can be edited' }
+  }
+
+  const { data: linesRaw, error: linesError } = await supabase
+    .from('sales_invoice_lines')
+    .select('id, dabbi_colour_code_snapshot, quantity_gross')
+    .eq('sales_invoice_id', invoiceId)
+
+  if (linesError) return { error: linesError.message }
+
+  const draftLines = (linesRaw ?? []) as unknown as DraftInvoiceLineRow[]
+  if (draftLines.length === 0) return { error: 'Invoice has no lines' }
+
+  const calculation = calculateSalesInvoice(
+    draftLines.map((line) => ({
+      id: line.id,
+      dabbi_colour_code: line.dabbi_colour_code_snapshot,
+      quantity_gross: Number(line.quantity_gross),
+    })),
+    {
+      yellow_rate_per_gross: yellowRate,
+      white_rate_per_gross: whiteRate,
+    },
+    {
+      transport_charges: transportCharges,
+      other_charges: otherCharges,
+      discount_amount: discountAmount,
+      round_off_amount: roundOffAmount,
+    },
+  )
+
+  if (!calculation.ok) return { error: calculation.error }
+
+  const { invoice } = calculation
+
+  const { error: updateInvoiceError } = await supabase
+    .from('sales_invoices')
+    .update({
+      invoice_date: invoiceDate,
+      due_date: dueDate,
+      yellow_rate_per_gross: yellowRate,
+      white_rate_per_gross: whiteRate,
+      goods_amount: invoice.goods_amount,
+      transport_charges: invoice.transport_charges,
+      other_charges: invoice.other_charges,
+      discount_amount: invoice.discount_amount,
+      round_off_amount: invoice.round_off_amount,
+      total_amount: invoice.total_amount,
+      notes,
+    })
+    .eq('id', invoiceId)
+
+  if (updateInvoiceError) return { error: updateInvoiceError.message }
+
+  for (const line of invoice.lines) {
+    const { error: lineError } = await supabase
+      .from('sales_invoice_lines')
+      .update({
+        rate_kind: line.rate_kind,
+        rate_per_gross: line.rate_per_gross,
+        line_amount: line.line_amount,
+      })
+      .eq('id', line.source_line_id)
+
+    if (lineError) return { error: lineError.message }
+  }
+
+  revalidatePath('/accounting/invoices')
+  revalidatePath(`/accounting/invoices/${invoiceId}`)
+  return { success: 'Draft invoice updated' }
 }

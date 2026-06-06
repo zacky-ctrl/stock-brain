@@ -8,6 +8,7 @@ import { PrintButton } from '@/components/ui/PrintButton'
 import { tableTd, tableTh } from '@/lib/ui'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { IssueInvoiceForm } from '../IssueInvoiceForm'
+import { EditDraftInvoiceForm } from '../EditDraftInvoiceForm'
 
 type InvoiceRow = {
   id: string
@@ -273,7 +274,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             <strong>{money(invoice.transport_charges)}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: 'var(--text-secondary)' }}>Other</span>
+            <span style={{ color: 'var(--text-secondary)' }}>Manual addition</span>
             <strong>{money(invoice.other_charges)}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -295,6 +296,16 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         <Card style={{ marginBottom: '1.5rem' }}>
           <h3 style={{ margin: '0 0 0.45rem', fontSize: 'var(--text-sm)' }}>Notes</h3>
           <p style={{ margin: 0, color: 'var(--text-secondary)' }}>{invoice.notes}</p>
+        </Card>
+      )}
+
+      {invoice.status === 'draft' && (
+        <Card style={{ marginBottom: '1.5rem' }}>
+          <h3 style={{ margin: '0 0 0.35rem', fontSize: 'var(--text-base)' }}>Edit draft</h3>
+          <p style={{ margin: '0 0 0.9rem', color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
+            Adjust rates, dates, transport, discount, round off, or a manual addition before issuing.
+          </p>
+          <EditDraftInvoiceForm invoice={invoice} />
         </Card>
       )}
 
