@@ -424,7 +424,7 @@ export default async function NewDispatchPage({
     : `New Dispatch — ${resolvedCustomerName}`
 
   return (
-    <main style={{ padding: '1.5rem 2rem', maxWidth: '1200px' }}>
+    <main className="dispatch-new-page" style={{ padding: '1.5rem 2rem', maxWidth: '1200px' }}>
       <PageHeader
         title={pageTitle}
         backHref={backHref}

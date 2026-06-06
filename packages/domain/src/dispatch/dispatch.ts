@@ -174,6 +174,23 @@ export async function createDispatch(
     }
   }
 
+  const totalRequestedByBalance = new Map<string, number>()
+  for (const line of activeLines) {
+    totalRequestedByBalance.set(
+      line.ready_stock_balance_id,
+      (totalRequestedByBalance.get(line.ready_stock_balance_id) ?? 0) + line.dispatched_qty,
+    )
+  }
+  for (const [balanceId, requestedQty] of totalRequestedByBalance.entries()) {
+    const balance = balancesMap.get(balanceId)
+    if (balance && requestedQty > balance.gross_qty) {
+      return {
+        success: false,
+        error: `Ready stock is insufficient for one SKU (${balance.gross_qty.toFixed(3)} gross stock, ${requestedQty} requested).`,
+      }
+    }
+  }
+
   // ── all validations passed — begin write phase ────────────────
   const now = new Date().toISOString()
 
@@ -194,7 +211,7 @@ export async function createDispatch(
   // ── prepare all line records in memory ────────────────────────
   const dispatchLineRecords: DispatchLineData[] = []
   const fulfilmentRecords: FulfilmentRecordInput[] = []
-  const dispatchedOrderLineIds = new Set<string>()
+  const forceFulfilledLineIds = new Set<string>()
   const allocationIdsToRelease: string[] = []
 
   for (const l of activeLines) {
@@ -231,12 +248,13 @@ export async function createDispatch(
       override_reason: l.override_reason ?? null,
     })
 
-    // Track which order lines are fulfilled (Option A closure)
-    if (l.order_line_id && (effectiveLineType === 'ordered' || effectiveLineType === 'short' || effectiveLineType === 'substitute')) {
-      dispatchedOrderLineIds.add(l.order_line_id)
+    // Substitutions intentionally fulfil the original line. Normal partial
+    // dispatches stay open based on their actual cumulative dispatched qty.
+    if (l.order_line_id && effectiveLineType === 'substitute') {
+      forceFulfilledLineIds.add(l.order_line_id)
     }
     if (l.original_order_line_id && effectiveLineType === 'substitute') {
-      dispatchedOrderLineIds.add(l.original_order_line_id)
+      forceFulfilledLineIds.add(l.original_order_line_id)
     }
 
     // Collect reservation IDs to release
@@ -325,7 +343,7 @@ export async function createDispatch(
 
   for (const ol of allOrderLines) {
     let newStatus: OrderLineStatus
-    if (dispatchedOrderLineIds.has(ol.id)) {
+    if (forceFulfilledLineIds.has(ol.id)) {
       newStatus = 'fully_dispatched'
     } else {
       const dispatched = dispatchedByLineId.get(ol.id) ?? 0

@@ -1,8 +1,9 @@
 'use client'
 
-import { useActionState, useState, useCallback, useMemo } from 'react'
-import { createDispatchAction } from './actions'
+import { useActionState, useState, useCallback, useMemo, useEffect } from 'react'
+import { createDispatchAction, releaseRemainingReservationsAction } from './actions'
 import type { ActionState } from '@/lib/masters'
+import type { DispatchActionState } from './actions'
 import { fieldWrap, inputStyle, selectStyle, btnPrimary, msgError } from '@/lib/ui'
 import type { CSSProperties } from 'react'
 import { MatrixViewToggle } from '@/components/matrix/MatrixViewToggle'
@@ -84,14 +85,25 @@ type OrderedLineState = {
   override_reason: string    // reason if going above available stock
 }
 
-type ExtraLineState = {
-  ready_stock_balance_id: string
-  quantity_dispatched: string
-  line_type: 'substitute' | 'extra'
-}
-
 function fmt(n: number): string {
   return n % 1 === 0 ? String(n) : n.toFixed(3)
+}
+
+function matrixCellKey(change: MatrixChangeEvent): string {
+  return `${change.design_id}|${change.colour_id}|${change.size_id}`
+}
+
+function buildInitialMatrixChanges(openLines: OpenOrderLine[]): MatrixChangeEvent[] {
+  return openLines.flatMap((ol) => {
+    const avail = ol.stock_options.reduce((s, o) => s + o.available_qty, 0)
+    if (avail <= 0) return []
+    return [{
+      design_id: ol.shape_design_id,
+      colour_id: ol.bindi_colour_id,
+      size_id: ol.size_id,
+      quantity: Math.min(avail, ol.open_qty),
+    }]
+  })
 }
 
 export function DispatchForm({
@@ -103,17 +115,21 @@ export function DispatchForm({
   colourMaster = [],
   extraStockOptions = [],
 }: DispatchFormProps) {
-  const [state, formAction, isPending] = useActionState<ActionState, FormData>(createDispatchAction, null)
+  const [state, formAction, isPending] = useActionState<DispatchActionState, FormData>(createDispatchAction, null)
+  const [releaseState, releaseAction, isReleasePending] = useActionState<ActionState, FormData>(releaseRemainingReservationsAction, null)
   const today = new Date().toISOString().split('T')[0]
-  const [view, setView] = useState<'list' | 'matrix'>('list')
+  const [view, setView] = useState<'list' | 'matrix'>('matrix')
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({})
+  const dispatchResult = state && 'dispatch_id' in state ? state : null
 
   const [entries, setEntries] = useState<OrderedLineState[]>(
     openLines.map((ol) => ({
       order_id: ol.order_id,
       order_line_id: ol.id,
       ready_stock_balance_id: ol.stock_options[0]?.id ?? '',
-      quantity_dispatched: '',
+      quantity_dispatched: ol.stock_options.length > 0
+        ? String(Math.min(ol.open_qty, ol.stock_options.reduce((s, o) => s + o.available_qty, 0)))
+        : '',
       skipped: false,
       is_substitute: false,
       sub_ready_stock_balance_id: extraStockOptions[0]?.id ?? '',
@@ -121,36 +137,10 @@ export function DispatchForm({
     })),
   )
 
-  const [extraLines, setExtraLines] = useState<ExtraLineState[]>([])
-  const [suppressedExtraKeys, setSuppressedExtraKeys] = useState<Set<string>>(new Set())
-
-  const addExtraLine = () =>
-    setExtraLines((prev) => [
-      ...prev,
-      { ready_stock_balance_id: extraStockOptions[0]?.id ?? '', quantity_dispatched: '', line_type: 'extra' },
-    ])
-
-  const removeExtraLine = (i: number) =>
-    setExtraLines((prev) => prev.filter((_, idx) => idx !== i))
-
-  const updateExtraLine = (i: number, field: keyof ExtraLineState, value: string) =>
-    setExtraLines((prev) => prev.map((e, idx) => (idx === i ? { ...e, [field]: value } : e)))
-
   const updateEntry = (i: number, field: keyof OrderedLineState, value: string | boolean) =>
     setEntries((prev) => prev.map((e, idx) => (idx === i ? { ...e, [field]: value } : e)))
 
-  const [matrixChanges, setMatrixChanges] = useState<MatrixChangeEvent[]>(() =>
-    openLines.flatMap((ol) => {
-      const avail = ol.stock_options.reduce((s, o) => s + o.available_qty, 0)
-      if (avail <= 0) return []
-      return [{
-        design_id: ol.shape_design_id,
-        colour_id: ol.bindi_colour_id,
-        size_id: ol.size_id,
-        quantity: Math.min(avail, ol.open_qty),
-      }]
-    })
-  )
+  const [matrixChanges, setMatrixChanges] = useState<MatrixChangeEvent[]>(() => buildInitialMatrixChanges(openLines))
 
   const handleMatrixCellChange = useCallback((change: MatrixChangeEvent) => {
     setMatrixChanges((prev) => {
@@ -199,6 +189,7 @@ export function DispatchForm({
     }))
 
   const canShowMatrix = sizeMaster.length > 0 && designMaster.length > 0 && colourMaster.length > 0
+  const effectiveView = canShowMatrix ? view : 'list'
 
   const fullOpenQtyMatrix = useMemo(() =>
     canShowMatrix
@@ -254,7 +245,13 @@ export function DispatchForm({
     [fullAvailStockMatrix, activeFilters],
   )
 
-  const [dispatchState, setDispatchState] = useState<Record<string, number>>({})
+  const [dispatchState, setDispatchState] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {}
+    for (const change of buildInitialMatrixChanges(openLines)) {
+      initial[matrixCellKey(change)] = change.quantity
+    }
+    return initial
+  })
 
   const highlightDispatchCell = useCallback(
     (row: { design_id: string; colour_id: string }, sizeId: string) => {
@@ -296,12 +293,6 @@ export function DispatchForm({
     )
   }, [matrixChanges, openLines])
 
-  // Auto-extras derived from domain output — extra lines not suppressed by the user
-  const autoExtras = useMemo(
-    () => matrixDispatchLines.filter((dl) => dl.line_type === 'extra' && !suppressedExtraKeys.has(dl.ready_stock_balance_id)),
-    [matrixDispatchLines, suppressedExtraKeys],
-  )
-
   // Matrix payload — memoised so the hidden input value is always in sync with matrixChanges state
   const matrixPayload = useMemo(() => {
     const lineById = new Map(openLines.map((ol) => [ol.id, ol]))
@@ -316,7 +307,8 @@ export function DispatchForm({
         line_type: 'ordered' as const,
       }))
 
-    const autoExtraLines = autoExtras
+    const autoExtraLines = matrixDispatchLines
+      .filter((dl) => dl.line_type === 'extra')
       .filter((dl) => dl.ready_stock_balance_id !== '' && dl.quantity_dispatched > 0)
       .map((dl) => ({
         order_id: null,
@@ -326,30 +318,11 @@ export function DispatchForm({
         line_type: 'extra' as const,
       }))
 
-    const manualExtraLines = extraLines
-      .filter((e) => e.ready_stock_balance_id && parseFloat(e.quantity_dispatched) > 0)
-      .map((e) => ({
-        order_id: null,
-        order_line_id: null,
-        ready_stock_balance_id: e.ready_stock_balance_id,
-        quantity_dispatched: parseFloat(e.quantity_dispatched) || 0,
-        line_type: e.line_type,
-      }))
+    return JSON.stringify([...orderedLines, ...autoExtraLines])
+  }, [matrixDispatchLines, openLines])
 
-    return JSON.stringify([...orderedLines, ...autoExtraLines, ...manualExtraLines])
-  }, [matrixDispatchLines, autoExtras, extraLines, openLines])
-
-  // List payload — includes ordered/substitute lines and extra SKUs
+  // List payload — overflow is split into extra by the server action.
   const listPayload = useMemo(() => {
-    const extra = extraLines
-      .filter((e) => e.ready_stock_balance_id && parseFloat(e.quantity_dispatched) > 0)
-      .map((e) => ({
-        order_id: null,
-        order_line_id: null,
-        ready_stock_balance_id: e.ready_stock_balance_id,
-        quantity_dispatched: parseFloat(e.quantity_dispatched) || 0,
-        line_type: e.line_type,
-      }))
     return JSON.stringify([
       ...entries
         .filter((e) => !e.skipped && parseFloat(e.quantity_dispatched) > 0)
@@ -374,17 +347,14 @@ export function DispatchForm({
             override_reason: e.override_reason || undefined,
           }
         }),
-      ...extra,
     ])
-  }, [entries, extraLines])
+  }, [entries])
 
-  const payload = view === 'matrix' ? matrixPayload : listPayload
+  const payload = effectiveView === 'matrix' ? matrixPayload : listPayload
 
   // ── Parcel total ─────────────────────────────────────────────
   const { parcelTotal, matrixOrderedTotal, matrixExtraTotal } = useMemo(() => {
-    const manualExtraTotal = extraLines
-      .reduce((s, e) => s + (parseFloat(e.quantity_dispatched) || 0), 0)
-    if (view === 'matrix') {
+    if (effectiveView === 'matrix') {
       let orderedSum = 0
       let excessSum = 0
       for (const c of matrixChanges) {
@@ -395,23 +365,17 @@ export function DispatchForm({
         orderedSum += Math.min(c.quantity, openQty)
         excessSum  += Math.max(0, c.quantity - openQty)
       }
-      // Subtract suppressed auto-extras from excess displayed
-      const suppressedQty = matrixDispatchLines
-        .filter((dl) => dl.line_type === 'extra' && suppressedExtraKeys.has(dl.ready_stock_balance_id))
-        .reduce((s, dl) => s + dl.quantity_dispatched, 0)
-      const effectiveExcess = excessSum - suppressedQty
       return {
-        parcelTotal: orderedSum + effectiveExcess + manualExtraTotal,
+        parcelTotal: orderedSum + excessSum,
         matrixOrderedTotal: orderedSum,
-        matrixExtraTotal: effectiveExcess + manualExtraTotal,
+        matrixExtraTotal: excessSum,
       }
     }
     const listTotal = entries
       .filter((e) => !e.skipped)
       .reduce((s, e) => s + (parseFloat(e.quantity_dispatched) || 0), 0)
-      + manualExtraTotal
     return { parcelTotal: listTotal, matrixOrderedTotal: 0, matrixExtraTotal: 0 }
-  }, [view, matrixChanges, entries, extraLines, availableByCell, openQtyByCell, matrixDispatchLines, suppressedExtraKeys])
+  }, [effectiveView, matrixChanges, entries, availableByCell, openQtyByCell])
 
   // Matrix cells with qty entered but no stock — these will be silently skipped
   const skippedCellCount = useMemo(() =>
@@ -422,10 +386,32 @@ export function DispatchForm({
     [matrixChanges, availableByCell],
   )
 
+  const overStockCellCount = useMemo(() =>
+    matrixChanges.filter((c) => {
+      const key = `${c.design_id}|${c.colour_id}|${c.size_id}`
+      const avail = availableByCell.get(key) ?? 0
+      return c.quantity > avail && avail > 0
+    }).length,
+    [matrixChanges, availableByCell],
+  )
+
   const parcelInRange = parcelTotal >= PARCEL_TARGET_MIN && parcelTotal <= PARCEL_TARGET_MAX
   const parcelColor = parcelTotal === 0 ? 'var(--text-secondary)' : parcelInRange ? 'var(--success)' : 'var(--warning)'
 
   const hasAnyStock = openLines.some((l) => l.stock_options.length > 0)
+
+  useEffect(() => {
+    if (!dispatchResult) return
+    localStorage.removeItem('matrix-draft-dispatch-new')
+    if (dispatchResult.remaining_reserved_qty > 0) return
+    window.location.href = `/dispatch/${dispatchResult.dispatch_id}`
+  }, [dispatchResult])
+
+  useEffect(() => {
+    if (releaseState && 'success' in releaseState && dispatchResult) {
+      window.location.href = `/dispatch/${dispatchResult.dispatch_id}`
+    }
+  }, [releaseState, dispatchResult])
 
   const tdStyle: CSSProperties = {
     padding: '0.5rem 0.75rem 0.5rem 0',
@@ -442,7 +428,7 @@ export function DispatchForm({
   }
 
   return (
-    <form action={formAction}>
+    <form action={formAction} className="dispatch-new-form">
       <input type="hidden" name="customer_id" value={customerId} />
       <input type="hidden" name="dispatch_lines" value={payload} />
 
@@ -450,7 +436,39 @@ export function DispatchForm({
         <p style={{ ...msgError, marginBottom: '0.75rem' }}>✗ {state.error}</p>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+      {dispatchResult && dispatchResult.remaining_reserved_qty > 0 && (
+        <div className="dispatch-reservation-prompt">
+          <div>
+            <strong>Keep remaining qty reserved?</strong>
+            <p>
+              {fmt(dispatchResult.remaining_reserved_qty)} gross is still reserved for this order after the partial dispatch.
+            </p>
+          </div>
+          <div className="dispatch-reservation-actions">
+            <button
+              type="button"
+              onClick={() => { window.location.href = `/dispatch/${dispatchResult.dispatch_id}` }}
+              className="dispatch-secondary-button"
+            >
+              Yes, keep reserved
+            </button>
+            <input type="hidden" name="order_id" value={dispatchResult.order_id ?? ''} />
+            <button
+              type="submit"
+              formAction={releaseAction}
+              disabled={isReleasePending || !dispatchResult.order_id}
+              className="dispatch-release-button"
+            >
+              {isReleasePending ? 'Releasing...' : 'No, release all'}
+            </button>
+          </div>
+          {releaseState && 'error' in releaseState && (
+            <p className="dispatch-prompt-error">✗ {releaseState.error}</p>
+          )}
+        </div>
+      )}
+
+      <div className="dispatch-new-meta-grid">
         <div style={fieldWrap}>
           <label>Dispatch Date</label>
           <input name="dispatch_date" type="date" defaultValue={today} style={inputStyle} required />
@@ -462,6 +480,10 @@ export function DispatchForm({
         <div style={fieldWrap}>
           <label>Notes (optional)</label>
           <input name="notes" style={inputStyle} placeholder="Any dispatch-level notes" />
+        </div>
+        <div style={fieldWrap}>
+          <label>Next parcel date (optional)</label>
+          <input name="next_parcel_date" type="date" style={inputStyle} />
         </div>
       </div>
 
@@ -479,7 +501,7 @@ export function DispatchForm({
       )}
 
       {/* ── Matrix mode ─────────────────────────────────────── */}
-      {view === 'matrix' && fullOpenQtyMatrix && (
+      {effectiveView === 'matrix' && fullOpenQtyMatrix && (
         <div style={{ marginBottom: '1.5rem' }}>
           <MatrixFilterBar
             filterConfig={filterConfig}
@@ -489,8 +511,8 @@ export function DispatchForm({
           <p style={{ fontSize: '0.82rem', fontWeight: 'bold', marginBottom: '0.35rem' }}>
             Available ready stock (reference)
           </p>
-          <div style={{ overflowX: 'auto', marginBottom: '1.25rem' }}>
-            {availStockMatrixData && <MatrixGrid data={availStockMatrixData} mode="view" />}
+          <div className="dispatch-matrix-wrap">
+            {availStockMatrixData && <MatrixGrid data={availStockMatrixData} mode="view" compactMobile />}
           </div>
 
           <p style={{ fontSize: '0.82rem', fontWeight: 'bold', marginBottom: '0.35rem' }}>
@@ -500,7 +522,7 @@ export function DispatchForm({
             Green cells — within ordered qty. Amber cells — excess over order qty; excess auto-becomes parcel filler. Red cells — no ready stock; will be skipped.
             Quantities distributed FIFO across open order lines.
           </p>
-          <div style={{ overflowX: 'auto' }}>
+          <div className="dispatch-matrix-wrap dispatch-matrix-edit-wrap">
             {openQtyMatrixData && (
               <MatrixGrid
                 data={openQtyMatrixData}
@@ -508,6 +530,7 @@ export function DispatchForm({
                 onCellChange={handleDispatchCellChange}
                 highlightCell={highlightDispatchCell}
                 draftKey="dispatch-new"
+                compactMobile
               />
             )}
           </div>
@@ -517,11 +540,16 @@ export function DispatchForm({
               Only {fmt(parcelTotal)} gross will be dispatched.
             </p>
           )}
+          {overStockCellCount > 0 && (
+            <p style={{ fontSize: '0.82rem', color: 'var(--danger)', margin: '0.6rem 0 0', padding: '0.4rem 0.6rem', background: 'var(--danger-subtle)', border: '1px solid var(--danger)', borderRadius: '3px' }}>
+              {overStockCellCount} {overStockCellCount === 1 ? 'cell exceeds' : 'cells exceed'} ready stock. Reduce those quantities before confirming.
+            </p>
+          )}
         </div>
       )}
 
       {/* ── List mode ────────────────────────────────────────── */}
-      {view === 'list' && openLines.length > 0 && (
+      {effectiveView === 'list' && openLines.length > 0 && (
         <div style={{ marginBottom: '1.5rem' }}>
           <h4 style={{ fontSize: '0.9rem', margin: '0 0 0.5rem' }}>
             Section 1 — Order Lines
@@ -691,138 +719,14 @@ export function DispatchForm({
         </div>
       )}
 
-      {view === 'list' && (
+      {effectiveView === 'list' && (
         <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '-0.5rem 0 1.5rem' }}>
           Check Skip to exclude a line from this parcel. Leave qty blank or zero to also skip.
         </p>
       )}
 
-
-      {/* ── Section 2: Extra SKUs ─────────────────────────── */}
-      {extraStockOptions.length > 0 && (
-        <div style={{ marginBottom: '1.5rem', borderTop: `1px solid var(--border)`, paddingTop: '1rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem' }}>
-            <h4 style={{ margin: 0, fontSize: '0.9rem' }}>
-              Section 2 — Extra SKUs
-            </h4>
-            <button
-              type="button"
-              onClick={addExtraLine}
-              style={{ fontSize: '0.78rem', padding: '0.2rem 0.65rem', border: `1px solid var(--info)`, color: 'var(--info)', background: 'var(--info-subtle)', cursor: 'pointer', borderRadius: '2px' }}
-            >
-              + Add to Parcel
-            </button>
-          </div>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0 0 0.75rem' }}>
-            Add SKUs not in the order — parcel fillers or stock push. Not linked to any order line.
-          </p>
-
-          {/* Auto-extras from matrix excess */}
-          {view === 'matrix' && autoExtras.length > 0 && (
-            <div style={{ marginBottom: '0.75rem', padding: '0.5rem 0.75rem', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '3px' }}>
-              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--warning)', marginBottom: '0.35rem' }}>
-                Auto-added from matrix excess:
-              </div>
-              {autoExtras.map((dl, i) => {
-                const opt = extraStockOptions.find((o) => o.id === dl.ready_stock_balance_id)
-                return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', fontSize: '0.78rem' }}>
-                    <span style={{ color: 'var(--text-secondary)', flex: 1 }}>{opt?.label ?? dl.ready_stock_balance_id}</span>
-                    <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: 'var(--warning)' }}>{fmt(dl.quantity_dispatched)} gross</span>
-                    <span style={{ fontSize: '0.68rem', padding: '0.05rem 0.3rem', background: 'rgba(245,158,11,0.12)', color: 'var(--warning)', borderRadius: '2px', border: '1px solid rgba(245,158,11,0.25)' }}>auto</span>
-                    <button
-                      type="button"
-                      onClick={() => setSuppressedExtraKeys((prev) => { const next = new Set(prev); next.add(dl.ready_stock_balance_id); return next })}
-                      style={{ fontSize: '0.7rem', padding: '0.1rem 0.35rem', border: `1px solid var(--border)`, color: 'var(--text-secondary)', background: 'white', cursor: 'pointer', borderRadius: '2px' }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {/* Restore suppressed button */}
-          {view === 'matrix' && suppressedExtraKeys.size > 0 && (
-            <button
-              type="button"
-              onClick={() => setSuppressedExtraKeys(new Set())}
-              style={{ fontSize: '0.72rem', marginBottom: '0.5rem', padding: '0.15rem 0.5rem', border: `1px solid var(--border)`, color: 'var(--text-secondary)', background: 'none', cursor: 'pointer', borderRadius: '2px' }}
-            >
-              Restore removed auto-extras
-            </button>
-          )}
-
-          {extraLines.length === 0 && autoExtras.length === 0 && (
-            <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-              No extra lines. Click &quot;+ Add to Parcel&quot; to add.
-            </p>
-          )}
-
-          {extraLines.map((el, i) => {
-            const selected = extraStockOptions.find((o) => o.id === el.ready_stock_balance_id)
-            return (
-              <div key={i} style={{ marginBottom: '0.75rem' }}>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                  <select
-                    value={el.ready_stock_balance_id}
-                    onChange={(e) => updateExtraLine(i, 'ready_stock_balance_id', e.target.value)}
-                    style={{ ...selectStyle, minWidth: '320px', flex: '1' }}
-                  >
-                    {extraStockOptions.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                  <span style={{ fontSize: '0.75rem', padding: '0.35rem 0.5rem', background: 'var(--info-subtle)', border: `1px solid var(--info)`, borderRadius: '2px', color: 'var(--info)' }}>
-                    EXTRA
-                  </span>
-                  <div>
-                    <input
-                      type="number"
-                      min="0.001"
-                      step="1"
-                      value={el.quantity_dispatched}
-                      onChange={(e) => updateExtraLine(i, 'quantity_dispatched', e.target.value)}
-                      style={{ ...inputStyle, width: '90px' }}
-                      placeholder="Qty"
-                    />
-                    {selected && parseFloat(el.quantity_dispatched) > selected.gross_qty && (
-                      <div style={{ fontSize: '0.72rem', color: 'var(--danger)', marginTop: '0.15rem' }}>
-                        ✗ {fmt(selected.gross_qty)} gross max
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeExtraLine(i)}
-                    style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem', border: `1px solid var(--danger)`, color: 'var(--danger)', background: 'white', cursor: 'pointer', borderRadius: '2px' }}
-                  >
-                    ✕
-                  </button>
-                </div>
-                {selected && selected.committed_qty > 0 && (
-                  <div style={{ fontSize: '0.78rem', color: 'var(--warning)', marginTop: '0.3rem', padding: '0.3rem 0.5rem', background: 'var(--warning-subtle)', border: '1px solid var(--warning)', borderRadius: '3px' }}>
-                    ⚠ {fmt(selected.committed_qty)} gross of this SKU is allocated to other orders. Dispatching will make those orders short — they will need fresh production.
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-
       {/* ── Parcel summary ───────────────────────────────────── */}
-      <div style={{
-        marginBottom: '1.25rem',
-        padding: '0.75rem 1rem',
-        background: 'var(--bg-elevated)',
-        border: `1px solid ${parcelColor}`,
-        borderRadius: '4px',
-        fontSize: '0.88rem',
-      }}>
+      <div className="dispatch-parcel-summary" style={{ borderColor: parcelColor }}>
         <span style={{ fontWeight: 'bold', color: parcelColor }}>
           Parcel total: {fmt(parcelTotal)} gross
         </span>
@@ -832,22 +736,22 @@ export function DispatchForm({
             {parcelInRange ? ' ✓' : parcelTotal < PARCEL_TARGET_MIN ? ' ⚠ below target' : ' ⚠ above target'}
           </span>
         )}
-        {view === 'list' && (
+        {effectiveView === 'list' && (
           <span style={{ marginLeft: '1rem', color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-            ({entries.filter((e) => !e.skipped && parseFloat(e.quantity_dispatched) > 0).length + extraLines.filter((e) => parseFloat(e.quantity_dispatched) > 0).length} lines)
+            ({entries.filter((e) => !e.skipped && parseFloat(e.quantity_dispatched) > 0).length} lines)
           </span>
         )}
-        {view === 'matrix' && matrixExtraTotal > 0 && (
+        {effectiveView === 'matrix' && matrixExtraTotal > 0 && (
           <div style={{ marginTop: '0.3rem', color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
             {fmt(matrixOrderedTotal)} against order lines + {fmt(matrixExtraTotal)} parcel fillers
           </div>
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+      <div className="dispatch-submit-bar">
         <button
           type="submit"
-          disabled={isPending || (!hasAnyStock && extraLines.length === 0)}
+          disabled={isPending || !hasAnyStock || overStockCellCount > 0 || !!dispatchResult}
           style={{ ...btnPrimary, fontWeight: 'bold', marginTop: 0 }}
         >
           {isPending ? 'Saving…' : `Confirm Dispatch — ${customerName}`}
