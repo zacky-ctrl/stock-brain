@@ -21,6 +21,8 @@ type Props = {
   }
   customerYellowRate: number | null
   customerWhiteRate: number | null
+  yellowRateRequired: boolean
+  whiteRateRequired: boolean
 }
 
 const fieldStyle = {
@@ -34,7 +36,13 @@ const inputStyle = {
   minHeight: '2.5rem',
 } as const
 
-export function EditDraftInvoiceForm({ invoice, customerYellowRate, customerWhiteRate }: Props) {
+export function EditDraftInvoiceForm({
+  invoice,
+  customerYellowRate,
+  customerWhiteRate,
+  yellowRateRequired,
+  whiteRateRequired,
+}: Props) {
   const [state, formAction, isPending] = useActionState<ActionState, FormData>(
     updateDraftInvoiceAction,
     null,
@@ -43,23 +51,29 @@ export function EditDraftInvoiceForm({ invoice, customerYellowRate, customerWhit
   const currentYellow = invoice.yellow_rate_per_gross !== null ? Number(invoice.yellow_rate_per_gross) : null
   const currentWhite = invoice.white_rate_per_gross !== null ? Number(invoice.white_rate_per_gross) : null
   const defaultYellow =
-    (currentYellow === null || currentYellow === 0) && customerYellowRate !== null
+    yellowRateRequired && (currentYellow === null || currentYellow === 0) && customerYellowRate !== null
       ? customerYellowRate
       : currentYellow
   const defaultWhite =
-    (currentWhite === null || currentWhite === 0) && customerWhiteRate !== null
+    whiteRateRequired && (currentWhite === null || currentWhite === 0) && customerWhiteRate !== null
       ? customerWhiteRate
       : currentWhite
 
-  const [yellowInput, setYellowInput] = useState(String(defaultYellow ?? ''))
-  const [whiteInput, setWhiteInput] = useState(String(defaultWhite ?? ''))
+  const [yellowInput, setYellowInput] = useState(
+    String(yellowRateRequired || defaultYellow ? (defaultYellow ?? '') : ''),
+  )
+  const [whiteInput, setWhiteInput] = useState(
+    String(whiteRateRequired || defaultWhite ? (defaultWhite ?? '') : ''),
+  )
 
   const yellowDiffersFromMaster =
+    yellowRateRequired &&
     customerYellowRate !== null &&
     yellowInput !== '' &&
     Number(yellowInput) !== customerYellowRate
 
   const whiteDiffersFromMaster =
+    whiteRateRequired &&
     customerWhiteRate !== null &&
     whiteInput !== '' &&
     Number(whiteInput) !== customerWhiteRate
@@ -120,6 +134,7 @@ export function EditDraftInvoiceForm({ invoice, customerYellowRate, customerWhit
             }}
           >
             Yellow Rate / Gross{yellowDiffersFromMaster ? ' ⚠' : ''}
+            {!yellowRateRequired ? ' (not used)' : ''}
           </span>
           <input
             name="yellow_rate_per_gross"
@@ -128,7 +143,7 @@ export function EditDraftInvoiceForm({ invoice, customerYellowRate, customerWhit
             min="0"
             value={yellowInput}
             onChange={(e) => setYellowInput(e.target.value)}
-            required
+            required={yellowRateRequired}
             style={{
               ...inputStyle,
               borderColor: yellowDiffersFromMaster ? 'var(--warning)' : undefined,
@@ -144,6 +159,7 @@ export function EditDraftInvoiceForm({ invoice, customerYellowRate, customerWhit
             }}
           >
             White Rate / Gross{whiteDiffersFromMaster ? ' ⚠' : ''}
+            {!whiteRateRequired ? ' (not used)' : ''}
           </span>
           <input
             name="white_rate_per_gross"
@@ -152,7 +168,7 @@ export function EditDraftInvoiceForm({ invoice, customerYellowRate, customerWhit
             min="0"
             value={whiteInput}
             onChange={(e) => setWhiteInput(e.target.value)}
-            required
+            required={whiteRateRequired}
             style={{
               ...inputStyle,
               borderColor: whiteDiffersFromMaster ? 'var(--warning)' : undefined,

@@ -281,6 +281,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const lines = (linesRaw ?? []) as unknown as InvoiceLineRow[]
   const dispatchLines = lines.filter((l) => l.line_type === 'dispatch')
   const manualLines = lines.filter((l) => l.line_type === 'manual')
+  const yellowRateRequired = dispatchLines.some((line) =>
+    line.rate_kind === 'yellow' || line.dabbi_colour_code_snapshot.toUpperCase().includes('YELLOW'),
+  )
+  const whiteRateRequired = dispatchLines.some((line) =>
+    line.rate_kind === 'white' || line.dabbi_colour_code_snapshot.toUpperCase().includes('WHITE'),
+  )
   const dispatchLinks = (dispatchLinksRaw ?? []) as unknown as DispatchLinkRow[]
   const pageTitle = invoice.invoice_number ?? 'Draft Invoice'
   const primaryDispatch = resolveRef(dispatchLinks[0]?.dispatch_events)
@@ -546,6 +552,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               invoice={invoice}
               customerYellowRate={customerYellowRate}
               customerWhiteRate={customerWhiteRate}
+              yellowRateRequired={yellowRateRequired}
+              whiteRateRequired={whiteRateRequired}
             />
           </Card>
         )}

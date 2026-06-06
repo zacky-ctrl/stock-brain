@@ -2,7 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { calculateSalesInvoice, type CalculatedSalesInvoiceLine } from '@stock-brain/domain'
+import {
+  calculateSalesInvoice,
+  resolveSalesRateKind,
+  type CalculatedSalesInvoiceLine,
+} from '@stock-brain/domain'
 import { getActorId } from '@/lib/get-actor'
 import type { ActionState } from '@/lib/masters'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
@@ -165,8 +169,8 @@ export async function updateDraftInvoiceAction(
 
   if (!invoiceId) return { error: 'Invoice is required' }
   if (!invoiceDate) return { error: 'Invoice date is required' }
-  if (yellowRate === null || yellowRate < 0) return { error: 'Yellow rate is required' }
-  if (whiteRate === null || whiteRate < 0) return { error: 'White rate is required' }
+  if (yellowRate !== null && yellowRate < 0) return { error: 'Yellow rate cannot be negative' }
+  if (whiteRate !== null && whiteRate < 0) return { error: 'White rate cannot be negative' }
 
   const moneyValues = [transportCharges, otherCharges, discountAmount, roundOffAmount]
   if (moneyValues.some((value) => !Number.isFinite(value))) {
@@ -210,6 +214,11 @@ export async function updateDraftInvoiceAction(
     dabbi_colour_code: line.dabbi_colour_code_snapshot,
     quantity_gross: Number(line.quantity_gross ?? 0),
   }))
+  const requiresYellowRate = sourceLines.some((line) => resolveSalesRateKind(line.dabbi_colour_code) === 'yellow')
+  const requiresWhiteRate = sourceLines.some((line) => resolveSalesRateKind(line.dabbi_colour_code) === 'white')
+
+  if (requiresYellowRate && yellowRate === null) return { error: 'Yellow rate is required for yellow dispatch lines' }
+  if (requiresWhiteRate && whiteRate === null) return { error: 'White rate is required for white dispatch lines' }
 
   let calculation
   if (sourceLines.length > 0) {
