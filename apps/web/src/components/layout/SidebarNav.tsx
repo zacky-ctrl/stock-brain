@@ -127,7 +127,7 @@ const MOBILE_TABS: NavItem[] = [
 
 const ROLE_SECTIONS: Record<string, string[]> = {
   admin: ['DAILY', 'STOCK', 'REPORTS', 'ACCOUNTING', 'SETTINGS'],
-  manager: ['DAILY', 'STOCK', 'REPORTS', 'ACCOUNTING'],
+  manager: ['DAILY', 'STOCK', 'REPORTS'],
   stock_operator: ['DAILY', 'STOCK'],
   accountant: ['REPORTS', 'ACCOUNTING'],
   viewer: ['REPORTS'],

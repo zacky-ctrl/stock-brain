@@ -82,6 +82,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 
+  if (pathname.startsWith('/accounting') &&
+      role !== 'admin' && role !== 'accountant') {
+    return NextResponse.redirect(new URL('/', request.url))
+  }
+
   if (role === 'accountant' &&
       !pathname.startsWith('/reports') &&
       !pathname.startsWith('/dispatch') &&
