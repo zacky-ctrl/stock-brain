@@ -216,7 +216,7 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
   const invoiceId = linkedInvoice?.id ?? invoiceLink?.sales_invoice_id ?? null
   const pageTitle = `Challan — ${challanNumber}`
 
-  // Build Matrix
+  // Build Matrix — only show sizes that were actually dispatched
   const dispatchAsOrderLines = lines.map(l => {
     const rsb = resolveRef(l.ready_stock_balance)
     return {
@@ -227,9 +227,13 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
     }
   }).filter(l => l.shape_design_id && l.bindi_colour_id && l.size_id)
 
+  // Only include size columns that were actually dispatched
+  const activeSizeIds = new Set(dispatchAsOrderLines.map(l => l.size_id))
+  const activeSizeMaster = sizeMaster.filter(s => activeSizeIds.has(s.id))
+
   const matrixData = buildMatrixFromOrderLines(
     dispatchAsOrderLines,
-    sizeMaster, designMaster, colourMaster
+    activeSizeMaster, designMaster, colourMaster
   )
 
   return (
@@ -255,32 +259,63 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
       />
       </div>
 
-      {/* Print-Only Header: Single Page Challan layout */}
-      <div className="print-only-header" style={{ display: 'none' }}>
-        <div style={{ textAlign: 'center', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '2px solid #000' }}>
-          <h1 style={{ margin: '0 0 0.5rem 0', fontSize: '18pt', fontWeight: 800 }}>NIRANKARI BINDI</h1>
-          <div style={{ fontSize: '10pt', color: '#444' }}>DELIVERY CHALLAN</div>
+      {/* Print-Only Challan: clean invoice-style layout */}
+      <div className="print-only-header" style={{ display: 'none', fontFamily: 'Arial, sans-serif', color: '#000' }}>
+
+        {/* Company header */}
+        <div style={{ marginBottom: '1rem', paddingBottom: '0.6rem', borderBottom: '2px solid #000' }}>
+          <div style={{ fontSize: '18pt', fontWeight: 800, letterSpacing: '-0.02em' }}>NIRANKARI BINDI</div>
+          <div style={{ fontSize: '10pt', fontWeight: 400, color: '#555', marginTop: '1px' }}>DELIVERY CHALLAN</div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', fontSize: '9pt', lineHeight: 1.6 }}>
-          <div style={{ flex: 1 }}>
-            <div><strong>To:</strong></div>
-            <div style={{ fontSize: '11pt', fontWeight: 700, margin: '0.2rem 0' }}>{customer?.name ?? '—'}</div>
-            {customer?.entity_name && <div>{customer.entity_name}</div>}
-            {customer?.address && <div style={{ whiteSpace: 'pre-wrap' }}>{customer.address}</div>}
-            {customer?.phone_number && <div>Ph: {customer.phone_number}</div>}
+        {/* Two-box row: Bill To + Challan Details */}
+        <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1.5rem' }}>
+          {/* Bill To */}
+          <div style={{ flex: 1, border: '1px solid #000', padding: '10px 12px', lineHeight: 1.55 }}>
+            <div style={{ fontSize: '7pt', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#555', marginBottom: '4px' }}>BILL TO</div>
+            <div style={{ fontSize: '12pt', fontWeight: 700 }}>{customer?.name ?? '—'}</div>
+            {customer?.entity_name && <div style={{ fontSize: '9pt' }}>{customer.entity_name}</div>}
+            {customer?.address && <div style={{ fontSize: '9pt' }}>{customer.address}</div>}
+            {customer?.phone_number && <div style={{ fontSize: '9pt' }}>Phone: {customer.phone_number}</div>}
+            {customer?.transport_name && <div style={{ fontSize: '9pt' }}>Transport: {customer.transport_name}</div>}
           </div>
-          <div style={{ flex: 1, textAlign: 'right' }}>
-            <div style={{ marginBottom: '0.2rem' }}><strong>Challan No:</strong> <span style={{ fontSize: '11pt' }}>{challanNumber}</span></div>
-            <div style={{ marginBottom: '0.2rem' }}><strong>Date:</strong> {dispatchDate}</div>
-            {customer?.transport_name && <div><strong>Transport:</strong> {customer.transport_name}</div>}
-            {dispatchRef && <div><strong>Ref:</strong> {dispatchRef}</div>}
+          {/* Challan Details */}
+          <div style={{ flex: 1, border: '1px solid #000', padding: '10px 12px', lineHeight: 1.55 }}>
+            <div style={{ fontSize: '7pt', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#555', marginBottom: '4px' }}>CHALLAN DETAILS</div>
+            <table style={{ width: '100%', fontSize: '9pt', borderCollapse: 'collapse' }}>
+              <tbody>
+                <tr>
+                  <td style={{ color: '#555', paddingBottom: '2px', width: '50%' }}>Challan No.</td>
+                  <td style={{ fontWeight: 700, textAlign: 'right' }}>{challanNumber}</td>
+                </tr>
+                <tr>
+                  <td style={{ color: '#555', paddingBottom: '2px' }}>Date</td>
+                  <td style={{ fontWeight: 700, textAlign: 'right' }}>{dispatchDate}</td>
+                </tr>
+                <tr>
+                  <td style={{ color: '#555', paddingBottom: '2px' }}>Total Sent</td>
+                  <td style={{ fontWeight: 700, textAlign: 'right' }}>{fmt(totalSentQty)} gross</td>
+                </tr>
+                {extrasQty > 0 && (
+                  <tr>
+                    <td style={{ color: '#555', paddingBottom: '2px' }}>Extras</td>
+                    <td style={{ fontWeight: 400, textAlign: 'right' }}>{fmt(extrasQty)} gross</td>
+                  </tr>
+                )}
+                {dispatchRef && (
+                  <tr>
+                    <td style={{ color: '#555', paddingBottom: '2px' }}>Reference</td>
+                    <td style={{ fontWeight: 400, textAlign: 'right' }}>{dispatchRef}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f5f5f5', padding: '0.5rem', border: '1px solid #000', marginBottom: '1.5rem' }}>
-          <div><strong>Total Quantity Sent:</strong> {fmt(totalSentQty)} gross</div>
-          {extrasQty > 0 && <div style={{ fontSize: '8pt' }}>Ordered: {fmt(orderedDispatchedQty)} · Extras: {fmt(extrasQty)}</div>}
+
+        {/* Matrix section heading */}
+        <div style={{ fontSize: '11pt', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem', marginTop: '0.25rem' }}>
+          SKU Quantity Matrix
         </div>
       </div>
 
@@ -525,43 +560,61 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
 
       <style>{`
         @media print {
-          @page { size: A4 portrait; margin: 12mm 15mm; }
+          @page { size: A4 portrait; margin: 12mm 15mm 15mm; }
           .no-print, .report-header-screen, .report-filter-bar, nav, header, footer { display: none !important; }
           
-          body { font-family: 'Inter', Arial, sans-serif !important; }
+          body { font-family: Arial, sans-serif !important; font-size: 10pt !important; color: #000 !important; }
           main { padding: 0 !important; max-width: 100% !important; background: white !important; }
           
-          .print-only-header { display: block !important; margin-bottom: 2rem !important; }
+          .print-only-header { display: block !important; margin-bottom: 1rem !important; }
           .print-signature { display: block !important; }
 
-          /* Print styles for MatrixGrid */
-          .matrix-print-root { overflow: visible !important; max-height: none !important; margin-bottom: 1rem !important; }
-          .matrix-print-root table { border-collapse: collapse !important; width: 100% !important; margin-bottom: 0 !important; }
+          /* Reset matrix for clean print */
+          .matrix-print-root { overflow: visible !important; max-height: none !important; margin-bottom: 0 !important; }
+          .matrix-print-root table { border-collapse: collapse !important; width: 100% !important; font-size: 9pt !important; }
+          
+          /* Data cells */
           .matrix-print-root th,
           .matrix-print-root td {
-            border: 1px solid #000 !important;
-            padding: 5px 6px !important;
-            font-size: 10pt !important;
+            border: 1px solid #ccc !important;
+            padding: 5px 7px !important;
+            font-size: 9pt !important;
             background: #fff !important;
             color: #000 !important;
+            text-align: center !important;
           }
+          /* Design + CLR columns left-aligned */
+          .matrix-print-root td:first-child,
+          .matrix-print-root td:nth-child(2) {
+            text-align: left !important;
+          }
+          /* Header row */
           .matrix-header-row th { 
-            background: #f4f4f4 !important; 
-            color: #000 !important;
+            background: #1e2d4a !important; 
+            color: #fff !important;
             font-weight: 700 !important;
+            font-size: 8pt !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.04em !important;
             -webkit-print-color-adjust: exact; 
             print-color-adjust: exact; 
           }
-          /* Ensure size columns are somewhat compact */
-          .matrix-print-root th, .matrix-print-root td {
-            text-align: center;
+          /* Grand total footer */
+          .matrix-print-root tfoot td {
+            background: #f4f4f4 !important;
+            font-weight: 700 !important;
+            border-top: 2px solid #000 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
-          .matrix-print-root td:first-child, .matrix-print-root th:first-child,
-          .matrix-print-root td:nth-child(2), .matrix-print-root th:nth-child(2) {
-            text-align: left;
+          /* SKU count line below matrix */
+          .matrix-print-root > div:last-child {
+            display: none !important;
           }
-          /* Hide the matrix contextual texts if any, as we have the challan header */
-          .matrix-print-root > div:last-child { display: none !important; }
+        }
+        @media screen {
+          .print-only-header { display: none !important; }
+          .print-signature { display: none; }
         }
       `}</style>
     </main>
