@@ -107,6 +107,18 @@ export {
 } from './dispatch/dispatch'
 
 export {
+  calculateSalesInvoice,
+  resolveSalesRateKind,
+  type CalculatedSalesInvoice,
+  type CalculatedSalesInvoiceLine,
+  type CustomerSalesRates,
+  type SalesInvoiceCalculationResult,
+  type SalesInvoiceCharges,
+  type SalesInvoiceSourceLine,
+  type SalesRateKind,
+} from './accounting/sales'
+
+export {
   METRES_PER_BUNDLE,
   recordVelvetReceipt,
   getVelvetStockBalance,
