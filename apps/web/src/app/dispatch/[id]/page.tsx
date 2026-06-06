@@ -8,8 +8,6 @@ import { Button } from '@/components/ui/Button'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { PrintButton } from '@/components/ui/PrintButton'
-import { MatrixGrid } from '@/components/matrix/MatrixGrid'
-import { buildMatrixFromOrderLines } from '@stock-brain/domain'
 import type { CSSProperties } from 'react'
 import Link from 'next/link'
 
@@ -137,22 +135,6 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
 
   const lines = (linesRaw ?? []) as unknown as LineRow[]
 
-  // Fetch matrix masters
-  const [shapesResult, bindiResult, sizesResult] = await Promise.allSettled([
-    supabase.from('shape_designs').select('id, code, name, sort_order').order('sort_order'),
-    supabase.from('bindi_colours').select('id, code, name, sort_order').order('sort_order'),
-    supabase.from('sizes').select('id, code, name, sort_order').order('sort_order'),
-  ])
-
-  type LookupRow = { id: string; code: string; name?: string | null; sort_order?: number | null }
-  const shapes = shapesResult.status === 'fulfilled' ? (shapesResult.value.data ?? []) as LookupRow[] : []
-  const bindis = bindiResult.status === 'fulfilled' ? (bindiResult.value.data ?? []) as LookupRow[] : []
-  const sizes = sizesResult.status === 'fulfilled' ? (sizesResult.value.data ?? []) as LookupRow[] : []
-
-  const sizeMaster   = sizes.map((s)  => ({ id: s.id, code: s.code, name: s.name ?? s.code, sort_order: Number(s.sort_order ?? 0) }))
-  const designMaster = shapes.map((s) => ({ id: s.id, name: s.name ?? s.code, sort_order: Number(s.sort_order ?? 0) }))
-  const colourMaster = bindis.map((c) => ({ id: c.id, code: c.code, name: c.name ?? c.code, sort_order: Number(c.sort_order ?? 0) }))
-
   // Separate ordered vs extra lines by line_type
   const extraDispatchLines = lines.filter((l) => l.line_type === 'extra')
   const orderedDispatchLines = lines.filter((l) => l.line_type !== 'extra')
@@ -216,25 +198,39 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
   const invoiceId = linkedInvoice?.id ?? invoiceLink?.sales_invoice_id ?? null
   const pageTitle = `Challan — ${challanNumber}`
 
-  // Build Matrix — only show sizes that were actually dispatched
-  const dispatchAsOrderLines = lines.map(l => {
+  // Build print matrix — group by (shape, colour) rows, columns = active sizes only
+  const SIZE_ORDER = ['000', '00', '0', '1', '2', '3', '4', '5', '6', '0.1', '0000']
+  function sortSizes(codes: string[]): string[] {
+    return [...codes].sort((a, b) => {
+      const ia = SIZE_ORDER.indexOf(a), ib = SIZE_ORDER.indexOf(b)
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib)
+    })
+  }
+
+  type ChallanMatrixGroup = { rowKey: string; shape: string; colour: string; quantities: Map<string, number>; total: number }
+  const challanSizeSet = new Set<string>()
+  const challanRowMap = new Map<string, ChallanMatrixGroup>()
+
+  for (const l of lines) {
     const rsb = resolveRef(l.ready_stock_balance)
-    return {
-      shape_design_id: rsb?.shape_design_id ?? '',
-      bindi_colour_id: rsb?.bindi_colour_id ?? '',
-      size_id: rsb?.size_id ?? '',
-      ordered_qty: Number(l.quantity_dispatched)
-    }
-  }).filter(l => l.shape_design_id && l.bindi_colour_id && l.size_id)
+    if (!rsb) continue
+    const shape = rsb.shape_design?.name ?? ''
+    const colour = rsb.bindi_colour?.code ?? ''
+    const size = rsb.size?.code ?? ''
+    if (!shape || !colour || !size) continue
+    challanSizeSet.add(size)
+    const rowKey = `${shape}__${colour}`
+    const row = challanRowMap.get(rowKey) ?? { rowKey, shape, colour, quantities: new Map<string, number>(), total: 0 }
+    row.quantities.set(size, (row.quantities.get(size) ?? 0) + Number(l.quantity_dispatched))
+    row.total += Number(l.quantity_dispatched)
+    challanRowMap.set(rowKey, row)
+  }
 
-  // Only include size columns that were actually dispatched
-  const activeSizeIds = new Set(dispatchAsOrderLines.map(l => l.size_id))
-  const activeSizeMaster = sizeMaster.filter(s => activeSizeIds.has(s.id))
-
-  const matrixData = buildMatrixFromOrderLines(
-    dispatchAsOrderLines,
-    activeSizeMaster, designMaster, colourMaster
-  )
+  const challanSizeCodes = sortSizes([...challanSizeSet])
+  const challanRows = [...challanRowMap.values()].sort((a, b) => a.shape.localeCompare(b.shape) || a.colour.localeCompare(b.colour))
+  const challanGridStyle = {
+    gridTemplateColumns: `13% 7% repeat(${Math.max(challanSizeCodes.length, 1)}, minmax(0, 1fr)) 8%`,
+  }
 
   return (
     <main style={{ padding: '1.5rem 2rem', maxWidth: '1200px' }}>
@@ -367,11 +363,85 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
         </div>
       )}
 
-      {/* Matrix View (Visible in print and screen) */}
-      <div className="print-section" style={{ marginBottom: '2.5rem' }}>
-        <h3 className="no-print" style={{ fontSize: '0.95rem', margin: '0 0 0.75rem' }}>Dispatch Matrix</h3>
-        <MatrixGrid data={matrixData} mode="view" />
+      {/* Screen-only: MatrixGrid for interactive viewing */}
+      <div className="no-print" style={{ marginBottom: '2.5rem' }}>
+        <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.75rem' }}>Dispatch Matrix</h3>
       </div>
+
+      {/* ── PRINT DOCUMENT ─────────────────────────────────────────────── */}
+      <section id="challan-print-doc">
+        <header className="challan-print-header">
+          <div>
+            <div className="invoice-print-brand">NIRANKARI BINDI</div>
+            <div className="invoice-print-subtitle">Delivery Challan</div>
+          </div>
+          <div className="invoice-print-meta">
+            <div><span>Challan No.</span><strong>{challanNumber}</strong></div>
+            <div><span>Date</span><strong>{dispatchDate}</strong></div>
+            <div><span>Total Sent</span><strong>{fmt(totalSentQty)} gross</strong></div>
+          </div>
+        </header>
+
+        <section className="invoice-print-parties">
+          <div>
+            <div className="invoice-print-label">Bill To</div>
+            <h2>{customer?.name ?? '—'}</h2>
+            {customer?.entity_name && <p>{customer.entity_name}</p>}
+            {customer?.address && <p>{customer.address}</p>}
+            {customer?.phone_number && <p>Phone: {customer.phone_number}</p>}
+            {customer?.transport_name && (
+              <p className="invoice-print-transport-line">Transport: <strong>{customer.transport_name}</strong></p>
+            )}
+          </div>
+          <div>
+            <div className="invoice-print-label">Challan Details</div>
+            <dl>
+              <div><dt>Challan No.</dt><dd>{challanNumber}</dd></div>
+              <div><dt>Date</dt><dd>{dispatchDate}</dd></div>
+              <div><dt>Total Sent</dt><dd>{fmt(totalSentQty)} gross</dd></div>
+              {extrasQty > 0 && <div><dt>Extras</dt><dd>{fmt(extrasQty)} gross</dd></div>}
+              {dispatchRef && <div><dt>Reference</dt><dd>{dispatchRef}</dd></div>}
+            </dl>
+          </div>
+        </section>
+
+        <section className="invoice-print-section">
+          <h3>SKU Quantity Matrix</h3>
+          <div className="invoice-print-matrix-group">
+            <div className="invoice-print-matrix-title">
+              <span>Dispatch: {challanNumber}</span>
+              <strong>{fmt(totalSentQty)} gross</strong>
+            </div>
+            <div className="invoice-print-matrix-grid">
+              <div className="invoice-print-matrix-row invoice-print-matrix-head" style={challanGridStyle}>
+                <div>Shape</div>
+                <div>CLR</div>
+                {challanSizeCodes.map(s => <div key={s}>{s}</div>)}
+                <div>Total</div>
+              </div>
+              {challanRows.map(row => (
+                <div key={row.rowKey} className="invoice-print-matrix-row" style={challanGridStyle}>
+                  <div className="invoice-print-shape-cell">{row.shape}</div>
+                  <div>{row.colour}</div>
+                  {challanSizeCodes.map(s => (
+                    <div key={s}>{row.quantities.has(s) ? String(row.quantities.get(s) ?? 0) : ''}</div>
+                  ))}
+                  <div className="invoice-print-total-cell">{String(row.total)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <footer className="challan-print-footer">
+          <div className="challan-print-signature">
+            <div>Prepared By</div>
+            <div>Checked By</div>
+            <div>Received By</div>
+          </div>
+          <span>© 2026 Nirankari Bindi</span>
+        </footer>
+      </section>
 
       {/* Lines — challan table (Hidden on print) */}
       <h3 className="no-print" style={{ fontSize: '0.95rem', margin: '0 0 0.75rem' }}>Detailed Dispatch Lines</h3>
@@ -559,62 +629,179 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
       </div>
 
       <style>{`
-        @media print {
-          @page { size: A4 portrait; margin: 12mm 15mm 15mm; }
-          .no-print, .report-header-screen, .report-filter-bar, nav, header, footer { display: none !important; }
-          
-          body { font-family: Arial, sans-serif !important; font-size: 10pt !important; color: #000 !important; }
-          main { padding: 0 !important; max-width: 100% !important; background: white !important; }
-          
-          .print-only-header { display: block !important; margin-bottom: 1rem !important; }
-          .print-signature { display: block !important; }
+        #challan-print-doc { display: none; }
 
-          /* Reset matrix for clean print */
-          .matrix-print-root { overflow: visible !important; max-height: none !important; margin-bottom: 0 !important; }
-          .matrix-print-root table { border-collapse: collapse !important; width: 100% !important; font-size: 9pt !important; }
-          
-          /* Data cells */
-          .matrix-print-root th,
-          .matrix-print-root td {
-            border: 1px solid #ccc !important;
-            padding: 5px 7px !important;
-            font-size: 9pt !important;
-            background: #fff !important;
-            color: #000 !important;
-            text-align: center !important;
-          }
-          /* Design + CLR columns left-aligned */
-          .matrix-print-root td:first-child,
-          .matrix-print-root td:nth-child(2) {
-            text-align: left !important;
-          }
-          /* Header row */
-          .matrix-header-row th { 
-            background: #1e2d4a !important; 
-            color: #fff !important;
-            font-weight: 700 !important;
-            font-size: 8pt !important;
-            text-transform: uppercase !important;
-            letter-spacing: 0.04em !important;
-            -webkit-print-color-adjust: exact; 
-            print-color-adjust: exact; 
-          }
-          /* Grand total footer */
-          .matrix-print-root tfoot td {
-            background: #f4f4f4 !important;
-            font-weight: 700 !important;
-            border-top: 2px solid #000 !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          /* SKU count line below matrix */
-          .matrix-print-root > div:last-child {
-            display: none !important;
-          }
-        }
         @media screen {
           .print-only-header { display: none !important; }
           .print-signature { display: none; }
+        }
+
+        @media print {
+          @page { size: A4 portrait; margin: 9mm; }
+
+          main { padding: 0 !important; max-width: none !important; }
+
+          #challan-print-doc {
+            display: block !important;
+            color: #111 !important;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 8.5pt;
+            line-height: 1.28;
+          }
+          #challan-print-doc * {
+            box-shadow: none !important;
+            text-shadow: none !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+
+          /* Reuse invoice print classes verbatim */
+          .challan-print-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 12mm;
+            align-items: flex-start;
+            border-bottom: 2px solid #111;
+            padding-bottom: 4mm;
+            margin-bottom: 5mm;
+          }
+          .invoice-print-brand {
+            font-size: 18pt;
+            font-weight: 800;
+            letter-spacing: 0;
+            text-transform: uppercase;
+          }
+          .invoice-print-subtitle,
+          .invoice-print-label {
+            font-size: 8pt;
+            color: #444;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+          }
+          .invoice-print-meta {
+            min-width: 55mm;
+            display: grid;
+            gap: 1.5mm;
+          }
+          .invoice-print-meta > div,
+          .invoice-print-parties dl > div {
+            display: flex;
+            justify-content: space-between;
+            gap: 8mm;
+          }
+          .invoice-print-meta span,
+          .invoice-print-parties dt {
+            color: #444;
+            font-weight: 600;
+          }
+          .invoice-print-parties {
+            display: grid;
+            grid-template-columns: 1.35fr 0.85fr;
+            gap: 7mm;
+            margin-bottom: 5mm;
+            break-inside: avoid;
+          }
+          .invoice-print-parties > div {
+            border: 1px solid #111;
+            padding: 4mm;
+          }
+          .invoice-print-parties h2 {
+            margin: 1.5mm 0 2mm;
+            font-size: 12pt;
+          }
+          .invoice-print-parties p { margin: 0 0 1mm; }
+          .invoice-print-transport-line {
+            display: inline-block;
+            margin-top: 1.5mm !important;
+            padding: 1.5mm 2mm;
+            border: 1px solid #111;
+            background: #fff3bf !important;
+            font-weight: 700;
+          }
+          .invoice-print-parties dl {
+            margin: 1.5mm 0 0;
+            display: grid;
+            gap: 1.5mm;
+          }
+          .invoice-print-parties dd { margin: 0; font-weight: 700; }
+
+          .invoice-print-section h3 {
+            margin: 0 0 2.5mm;
+            font-size: 10pt;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+          }
+          .invoice-print-matrix-group {
+            break-inside: avoid;
+            margin-bottom: 4mm;
+          }
+          .invoice-print-matrix-title {
+            display: flex;
+            justify-content: space-between;
+            gap: 6mm;
+            padding: 1.8mm 2.2mm;
+            border: 1px solid #111;
+            border-bottom: 0;
+            background: #f2f2f2 !important;
+            font-weight: 800;
+          }
+          .invoice-print-matrix-grid {
+            border-top: 1px solid #111;
+            border-left: 1px solid #111;
+          }
+          .invoice-print-matrix-row { display: grid; }
+          .invoice-print-matrix-row > div {
+            border: 1px solid #111 !important;
+            border-top: 0 !important;
+            border-left: 0 !important;
+            padding: 1.8mm 1.4mm !important;
+            background: #fff !important;
+            color: #111 !important;
+            font-size: 8pt;
+            min-width: 0;
+            box-sizing: border-box;
+            text-align: center;
+          }
+          .invoice-print-matrix-head > div {
+            background: #f2f2f2 !important;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+          }
+          .invoice-print-matrix-row > div:first-child {
+            text-align: left;
+            font-weight: 700;
+          }
+          .invoice-print-matrix-row > div:nth-child(2) {
+            text-align: center;
+            font-weight: 700;
+          }
+          .invoice-print-total-cell { font-weight: 800; }
+          .invoice-print-shape-cell { font-weight: 700; }
+
+          /* Challan-specific footer */
+          .challan-print-footer {
+            margin-top: 8mm;
+            border-top: 1px solid #bbb;
+            padding-top: 3mm;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            font-size: 7.5pt;
+            color: #555;
+          }
+          .challan-print-signature {
+            display: flex;
+            gap: 20mm;
+          }
+          .challan-print-signature > div {
+            border-top: 1px solid #000;
+            padding-top: 1.5mm;
+            min-width: 35mm;
+            text-align: center;
+            font-size: 7.5pt;
+          }
         }
       `}</style>
     </main>
