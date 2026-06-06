@@ -292,7 +292,7 @@ export default async function CuttingRequiredReportPage({ searchParams }: PagePr
         <>
           {/* ── Section 1: CUT ON MACHINE TODAY ── */}
           {cutOnMachineRows.length > 0 && (
-            <>
+            <div className="print-section">
               <div style={{ borderLeft: '3px solid var(--danger)', paddingLeft: '0.75rem', marginBottom: '1rem' }}>
                 <h2 style={{ ...sectionHeading, color: 'var(--danger)' }}>Cut on Machine Today</h2>
                 <p style={sectionSummary}>
@@ -389,12 +389,12 @@ export default async function CuttingRequiredReportPage({ searchParams }: PagePr
                   </table>
                 </div>
               </div>
-            </>
+            </div>
           )}
 
           {/* ── Section 2: PROCURE VELVET FIRST ── */}
           {procureVelvetRows.length > 0 && (
-            <>
+            <div className="print-section">
               <div style={{ borderLeft: '3px solid var(--warning)', paddingLeft: '0.75rem', marginBottom: '1rem' }}>
                 <h2 style={{ ...sectionHeading, color: 'var(--warning)' }}>Procure Velvet First</h2>
                 <p style={sectionSummary}>
@@ -456,7 +456,7 @@ export default async function CuttingRequiredReportPage({ searchParams }: PagePr
                   Velvet procurement quantities — coming once conversion rates are fully entered
                 </p>
               </div>
-            </>
+            </div>
           )}
 
           <div className="print-signature">
@@ -470,7 +470,14 @@ export default async function CuttingRequiredReportPage({ searchParams }: PagePr
       <style>{`
         @media print {
           @page { size: A4 landscape; margin: 1cm; }
+          .print-section + .print-section { page-break-before: always; }
           .print-signature { display: block !important; }
+          .no-print { display: none !important; }
+          table { width: 100%; font-size: 9px; }
+          thead { display: table-header-group; }
+          tr { page-break-inside: avoid; }
+          main { padding: 0 !important; max-width: 100% !important; }
+          div[style*="overflow"] { overflow: visible !important; }
         }
         @media screen {
           .print-signature { display: none; }
