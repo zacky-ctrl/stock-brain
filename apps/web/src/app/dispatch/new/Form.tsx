@@ -94,16 +94,21 @@ function matrixCellKey(change: MatrixChangeEvent): string {
 }
 
 function buildInitialMatrixChanges(openLines: OpenOrderLine[]): MatrixChangeEvent[] {
-  return openLines.flatMap((ol) => {
-    const avail = ol.stock_options.reduce((s, o) => s + o.available_qty, 0)
-    if (avail <= 0) return []
-    return [{
+  const changesByCell = new Map<string, MatrixChangeEvent>()
+
+  for (const ol of openLines) {
+    if (ol.open_qty <= 0) continue
+    const key = `${ol.shape_design_id}|${ol.bindi_colour_id}|${ol.size_id}`
+    const existing = changesByCell.get(key)
+    changesByCell.set(key, {
       design_id: ol.shape_design_id,
       colour_id: ol.bindi_colour_id,
       size_id: ol.size_id,
-      quantity: Math.min(avail, ol.open_qty),
-    }]
-  })
+      quantity: (existing?.quantity ?? 0) + ol.open_qty,
+    })
+  }
+
+  return [...changesByCell.values()]
 }
 
 export function DispatchForm({
@@ -127,9 +132,7 @@ export function DispatchForm({
       order_id: ol.order_id,
       order_line_id: ol.id,
       ready_stock_balance_id: ol.stock_options[0]?.id ?? '',
-      quantity_dispatched: ol.stock_options.length > 0
-        ? String(Math.min(ol.open_qty, ol.stock_options.reduce((s, o) => s + o.available_qty, 0)))
-        : '',
+      quantity_dispatched: ol.open_qty > 0 ? String(ol.open_qty) : '',
       skipped: false,
       is_substitute: false,
       sub_ready_stock_balance_id: extraStockOptions[0]?.id ?? '',
@@ -259,10 +262,12 @@ export function DispatchForm({
       const entered = dispatchState[key] ?? 0
       const avail = availableByCell.get(key) ?? 0
       const openQty = openQtyByCell.get(key) ?? 0
-      if (avail === 0) return 'shortage' as const
-      if (entered > avail) return 'shortage' as const        // red — exceeds available stock
+      if (openQty <= 0 && entered <= 0) return 'normal' as const
+      if (openQty > 0 && avail === 0) return 'shortage' as const
+      if (entered > avail) return 'shortage' as const       // red — cannot dispatch entered qty from ready stock
       if (entered > openQty) return 'excess' as const       // amber — excess over order, becomes extra
-      if (entered > 0) return 'covered' as const            // green — within ordered qty
+      if (openQty > 0 && avail < openQty) return 'partial' as const
+      if (entered > 0) return 'covered' as const            // green — full ordered qty can be dispatched
       return 'normal' as const
     },
     [dispatchState, availableByCell, openQtyByCell],
@@ -377,14 +382,25 @@ export function DispatchForm({
     return { parcelTotal: listTotal, matrixOrderedTotal: 0, matrixExtraTotal: 0 }
   }, [effectiveView, matrixChanges, entries, availableByCell, openQtyByCell])
 
-  // Matrix cells with qty entered but no stock — these will be silently skipped
-  const skippedCellCount = useMemo(() =>
-    matrixChanges.filter((c) => {
-      const key = `${c.design_id}|${c.colour_id}|${c.size_id}`
-      return c.quantity > 0 && (availableByCell.get(key) ?? 0) === 0
-    }).length,
-    [matrixChanges, availableByCell],
-  )
+  const demandCoverage = useMemo(() => {
+    let noStockCellCount = 0
+    let partialStockCellCount = 0
+    let shortageQty = 0
+
+    for (const [key, openQty] of openQtyByCell.entries()) {
+      if (openQty <= 0) continue
+      const avail = availableByCell.get(key) ?? 0
+      if (avail <= 0) {
+        noStockCellCount += 1
+        shortageQty += openQty
+      } else if (avail < openQty) {
+        partialStockCellCount += 1
+        shortageQty += openQty - avail
+      }
+    }
+
+    return { noStockCellCount, partialStockCellCount, shortageQty }
+  }, [openQtyByCell, availableByCell])
 
   const overStockCellCount = useMemo(() =>
     matrixChanges.filter((c) => {
@@ -519,7 +535,7 @@ export function DispatchForm({
             Enter dispatch quantities
           </p>
           <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}>
-            Green cells — within ordered qty. Amber cells — excess over order qty; excess auto-becomes parcel filler. Red cells — no ready stock; will be skipped.
+            Green cells — full order qty ready. Amber cells — partial stock or excess over order qty. Red cells — entered qty cannot be dispatched from ready stock.
             Quantities distributed FIFO across open order lines.
           </p>
           <div className="dispatch-matrix-wrap dispatch-matrix-edit-wrap">
@@ -534,10 +550,12 @@ export function DispatchForm({
               />
             )}
           </div>
-          {skippedCellCount > 0 && (
+          {demandCoverage.shortageQty > 0 && (
             <p style={{ fontSize: '0.82rem', color: 'var(--warning)', margin: '0.6rem 0 0', padding: '0.4rem 0.6rem', background: 'var(--warning-subtle)', border: '1px solid var(--warning)', borderRadius: '3px' }}>
-              ⚠ {skippedCellCount} {skippedCellCount === 1 ? 'cell has' : 'cells have'} no ready stock and will be skipped.
-              Only {fmt(parcelTotal)} gross will be dispatched.
+              Ready stock shortage: {fmt(demandCoverage.shortageQty)} gross across{' '}
+              {demandCoverage.noStockCellCount + demandCoverage.partialStockCellCount} cells
+              {demandCoverage.noStockCellCount > 0 ? ` (${demandCoverage.noStockCellCount} with no ready stock)` : ''}
+              {demandCoverage.partialStockCellCount > 0 ? ` (${demandCoverage.partialStockCellCount} partially covered)` : ''}.
             </p>
           )}
           {overStockCellCount > 0 && (
