@@ -38,6 +38,7 @@ import {
   Brain,
   History,
   PackagePlus,
+  BookOpen,
 } from 'lucide-react'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 
@@ -98,6 +99,8 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'ACCOUNTING',
     items: [
       { href: '/accounting/invoices', label: 'Invoices', icon: ReceiptText },
+      { href: '/accounting/ledger',   label: 'Ledger',   icon: BookOpen },
+      { href: '/accounting/journal',  label: 'Journal',  icon: FileText },
     ],
   },
   {
