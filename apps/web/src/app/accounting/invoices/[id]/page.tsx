@@ -240,6 +240,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const primaryDispatch = resolveRef(dispatchLinks[0]?.dispatch_events)
   const { groups: printMatrixGroups, sizeCodes: printSizeCodes } = buildPrintMatrixGroups(lines)
   const rateSummary = buildRateSummary(lines)
+  const sizeColumnWidth = `${72 / Math.max(printSizeCodes.length, 1)}%`
 
   return (
     <main style={{ padding: '1.5rem 2rem', maxWidth: '1200px' }}>
@@ -457,6 +458,14 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 <strong>{qty(group.total)} gross</strong>
               </div>
               <table className="invoice-print-matrix-table">
+                <colgroup>
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '7%' }} />
+                  {printSizeCodes.map((sizeCode) => (
+                    <col key={sizeCode} style={{ width: sizeColumnWidth }} />
+                  ))}
+                  <col style={{ width: '8%' }} />
+                </colgroup>
                 <thead>
                   <tr>
                     <th>Shape</th>
@@ -689,14 +698,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
           .invoice-print-matrix-table th:first-child,
           .invoice-print-matrix-table td:first-child {
-            width: 24mm;
             text-align: left;
             font-weight: 700;
           }
 
           .invoice-print-matrix-table th:nth-child(2),
           .invoice-print-matrix-table td:nth-child(2) {
-            width: 13mm;
             text-align: center;
             font-weight: 700;
           }
@@ -708,7 +715,6 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
           .invoice-print-matrix-table th:last-child,
           .invoice-print-matrix-table td:last-child {
-            width: 15mm;
             font-weight: 800;
           }
 
