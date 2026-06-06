@@ -229,13 +229,13 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
 
   const matrixData = buildMatrixFromOrderLines(
     dispatchAsOrderLines,
-    sizeMaster, designMaster, colourMaster,
-    { context_label: 'Dispatched Goods', date_label: dispatchDate }
+    sizeMaster, designMaster, colourMaster
   )
 
   return (
     <main style={{ padding: '1.5rem 2rem', maxWidth: '1200px' }}>
-      <PageHeader
+      <div className="no-print">
+        <PageHeader
         title={pageTitle}
         backHref="/dispatch"
         badge={<Badge variant={statusBadgeVariant((event as { status: string }).status)} label={(event as { status: string }).status} size="sm" />}
@@ -253,6 +253,7 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
           </>
         }
       />
+      </div>
 
       {/* Print-Only Header: Single Page Challan layout */}
       <div className="print-only-header" style={{ display: 'none' }}>
@@ -498,12 +499,14 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
 
       {/* Void action — intentionally at the bottom, separated from other controls */}
       {(event as { status: string }).status === 'confirmed' && (
-        <VoidDispatchForm
-          eventId={id}
-          totalGross={totalSentQty}
-          orderLineCount={orderLineCount}
-          affectedOrders={affectedOrders}
-        />
+        <div className="no-print">
+          <VoidDispatchForm
+            eventId={id}
+            totalGross={totalSentQty}
+            orderLineCount={orderLineCount}
+            affectedOrders={affectedOrders}
+          />
+        </div>
       )}
       {(event as { status: string }).status === 'voided' && (
         <p className="no-print" style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', padding: '0.75rem', background: 'var(--bg-elevated)', border: `1px solid var(--border)` }}>
@@ -522,28 +525,30 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
 
       <style>{`
         @media print {
-          @page { size: A4 portrait; margin: 15mm; }
-          .no-print, .report-header-screen, .report-filter-bar, nav, header { display: none !important; }
+          @page { size: A4 portrait; margin: 12mm 15mm; }
+          .no-print, .report-header-screen, .report-filter-bar, nav, header, footer { display: none !important; }
           
+          body { font-family: 'Inter', Arial, sans-serif !important; }
           main { padding: 0 !important; max-width: 100% !important; background: white !important; }
-          .print-only-header { display: block !important; }
+          
+          .print-only-header { display: block !important; margin-bottom: 2rem !important; }
           .print-signature { display: block !important; }
 
           /* Print styles for MatrixGrid */
-          .matrix-print-root { overflow: visible !important; max-height: none !important; margin-bottom: 2rem !important; }
-          .matrix-print-root table { border-collapse: collapse !important; width: 100% !important; }
+          .matrix-print-root { overflow: visible !important; max-height: none !important; margin-bottom: 1rem !important; }
+          .matrix-print-root table { border-collapse: collapse !important; width: 100% !important; margin-bottom: 0 !important; }
           .matrix-print-root th,
           .matrix-print-root td {
             border: 1px solid #000 !important;
-            padding: 4px 6px !important;
-            font-size: 9pt !important;
+            padding: 5px 6px !important;
+            font-size: 10pt !important;
             background: #fff !important;
             color: #000 !important;
           }
           .matrix-header-row th { 
-            background: #f0f0f0 !important; 
+            background: #f4f4f4 !important; 
             color: #000 !important;
-            font-weight: bold !important;
+            font-weight: 700 !important;
             -webkit-print-color-adjust: exact; 
             print-color-adjust: exact; 
           }
