@@ -416,22 +416,25 @@ export default async function PlanningAllocationPage({
                 {(row.planning_status === 'ready_to_dispatch' || row.planning_status === 'ready_to_dispatch_override') && (
                   <Link
                     href={`/dispatch/new?customer_id=${row.customer_id}`}
+                    className="no-print"
                     style={{ fontSize: 'var(--text-xs)', color: 'var(--success)', textDecoration: 'underline' }}
                   >
                     →
                   </Link>
                 )}
                 {canReserve && bestBalanceId && (
-                  <ReserveButton
-                    orderLineId={row.order_line_id}
-                    qty={row.ready_allocated_qty}
-                    balanceId={bestBalanceId}
-                  />
+                  <span className="no-print">
+                    <ReserveButton
+                      orderLineId={row.order_line_id}
+                      qty={row.ready_allocated_qty}
+                      balanceId={bestBalanceId}
+                    />
+                  </span>
                 )}
               </span>
             )}
           </td>
-          <td style={{ ...tableTd, whiteSpace: 'nowrap' }}>
+          <td className="no-print" style={{ ...tableTd, whiteSpace: 'nowrap' }}>
             <Link
               href={`/admin/planning-overrides/new?order_line_id=${row.order_line_id}`}
               style={{
@@ -521,7 +524,7 @@ export default async function PlanningAllocationPage({
   }
 
   return (
-    <main style={{ padding: '1.5rem 2rem', maxWidth: '1900px' }}>
+    <main className="planning-page" style={{ padding: '1.5rem 2rem', maxWidth: '1900px' }}>
       <PageHeader
         title="Planning"
         subtitle="Open demand allocated sequentially by priority across ready stock → WIP → cuttings → velvet."
@@ -531,8 +534,8 @@ export default async function PlanningAllocationPage({
         <p style={{ color: 'var(--danger)', fontSize: 'var(--text-sm)' }}>✗ {fetchError}</p>
       )}
 
-      {/* 4 stat cards */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+      {/* 5 stat cards — move to bottom on print via .print-stat-cards order:999 */}
+      <div className="print-stat-cards" style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
         {/* PENDING */}
         <div style={statCardBase}>
           <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
@@ -605,6 +608,7 @@ export default async function PlanningAllocationPage({
       )}
 
       {rows.length > 0 && (
+        <div className="planning-toggle-wrapper">
         <PlanningViewToggle
           rows={enrichedRows}
           shapeMap={shapeRecord}
@@ -625,6 +629,7 @@ export default async function PlanningAllocationPage({
         >
           {skuTableContent}
         </PlanningViewToggle>
+        </div>
       )}
 
       <p style={{ marginTop: '1.5rem', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', lineHeight: 1.6 }}>

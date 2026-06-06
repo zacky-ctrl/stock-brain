@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ReactNode } from 'react'
+import { PrintButton } from '@/components/ui/PrintButton'
 import { OrderGroupedView } from './OrderGroupedView'
 import type { OrderGroupedViewProps, PlanningRowEnriched } from './OrderGroupedView'
 import type { PlanningLineStatus } from '@stock-brain/types'
@@ -100,7 +101,7 @@ function FilterBar({ filters, onChange, customers, designs, colours, dabbis, act
   }
 
   return (
-    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
+    <div className="no-print" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
       {field('customer', 'Customer', customers)}
       {field('design', 'Design', designs)}
       {field('clr', 'CLR', colours)}
@@ -199,6 +200,12 @@ type Props = Omit<OrderGroupedViewProps, 'rows'> & {
 
 const STORAGE_KEY = 'planning-view-v2'
 
+const SORT_LABELS: Record<string, string> = {
+  priority:   'By Priority',
+  order_date: 'By Order Date',
+  due_date:   'By Due Date',
+}
+
 // ── component ──────────────────────────────────────────────────
 
 export function PlanningViewToggle({
@@ -260,6 +267,25 @@ export function PlanningViewToggle({
   const filteredRows = useMemo(() => applyFilters(rows, filters), [rows, filters])
   const activeFilterCount = countActiveFilters(filters)
 
+  const printFilterSummary = useMemo(() => {
+    const STATUS_MAP: Record<string, string> = { ready: 'Ready', labour: 'Labour', cut: 'Cut', wip: 'WIP' }
+    const parts: string[] = []
+    if (filters.customer) parts.push(`Customer: ${customerOptions.find(c => c.id === filters.customer)?.label ?? filters.customer}`)
+    if (filters.design) parts.push(`Design: ${designOptions.find(d => d.id === filters.design)?.label ?? filters.design}`)
+    if (filters.clr) parts.push(`CLR: ${colourOptions.find(c => c.id === filters.clr)?.label ?? filters.clr}`)
+    if (filters.dabbi) parts.push(`Dabbi: ${dabbiOptions.find(d => d.id === filters.dabbi)?.label ?? filters.dabbi}`)
+    if (filters.status) parts.push(`Status: ${STATUS_MAP[filters.status] ?? filters.status}`)
+    if (filters.dateFrom) parts.push(`From: ${filters.dateFrom}`)
+    if (filters.dateTo) parts.push(`To: ${filters.dateTo}`)
+    return parts.length > 0 ? parts.join(' | ') : 'No active filters'
+  }, [filters, customerOptions, designOptions, colourOptions, dabbiOptions])
+
+  const sortLabel = SORT_LABELS[initialSort] ?? initialSort
+  const printDate = new Date().toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+
   const btnBase: React.CSSProperties = {
     cursor: 'pointer',
     padding: '0.35rem 0.9rem',
@@ -298,8 +324,55 @@ export function PlanningViewToggle({
 
   return (
     <>
+      <style>{`
+        .planning-print-header { display: none; }
+        @media print {
+          .planning-print-header {
+            display: block !important;
+            text-align: center;
+            border-bottom: 2px solid #000;
+            padding-bottom: 8px;
+            margin-bottom: 14px;
+          }
+          .planning-page {
+            display: flex !important;
+            flex-direction: column !important;
+            max-width: 100% !important;
+            padding: 0 !important;
+          }
+          .print-stat-cards {
+            order: 999 !important;
+            page-break-before: always !important;
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 0.75rem !important;
+            border-top: 2px solid #000 !important;
+            padding-top: 1rem !important;
+            margin-bottom: 0 !important;
+          }
+          .planning-toggle-wrapper { order: 1 !important; }
+          @page { size: A4 landscape; margin: 1cm; }
+          table { font-size: 9px !important; width: 100% !important; }
+          thead { display: table-header-group !important; }
+          tr { page-break-inside: avoid !important; }
+          th { background: #f0f0f0 !important; color: #000 !important; font-size: 9px !important; }
+          td { font-size: 9px !important; }
+          * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+      `}</style>
+
+      {/* Print header — hidden on screen, visible on print */}
+      <div className="planning-print-header">
+        <div style={{ fontSize: '18px', fontWeight: 'bold' }}>NIRANKARI BINDI</div>
+        <div style={{ fontSize: '14px', fontWeight: 'bold', textDecoration: 'underline', marginTop: '2px' }}>Planning Report</div>
+        <div style={{ fontSize: '11px', marginTop: '4px' }}>
+          {printFilterSummary} | Sort: {sortLabel} | Generated: {printDate}
+        </div>
+        <hr style={{ margin: '8px 0 0' }} />
+      </div>
+
       {/* Top tabs: List | Matrix */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center' }}>
+      <div className="no-print" style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', alignItems: 'center' }}>
         <button onClick={() => setMainView('list')} style={tabBtn(mainView === 'list')}>List</button>
         <button onClick={() => setMainView('matrix')} style={tabBtn(mainView === 'matrix')}>Matrix</button>
 
@@ -310,6 +383,9 @@ export function PlanningViewToggle({
           </div>
         )}
 
+        <span style={{ marginLeft: 'auto' }}>
+          <PrintButton label="Print Plan" variant="secondary" />
+        </span>
       </div>
 
       {/* Filter bar — shared across list + matrix */}
