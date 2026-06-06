@@ -44,6 +44,10 @@ export type ExtraStockOption = {
   available_qty: number
   gross_qty: number
   committed_qty: number
+  shape_design_id: string
+  bindi_colour_id: string
+  size_id: string
+  dabbi_colour_id: string
 }
 
 export type OpenOrderLine = {
@@ -159,16 +163,53 @@ export function DispatchForm({
     })
   }, [])
 
+  const availableStockRows = useMemo(() => {
+    const byBalance = new Map<string, {
+      shape_design_id: string
+      bindi_colour_id: string
+      size_id: string
+      gross_qty: number
+      available_qty: number
+      committed_qty: number
+    }>()
+
+    for (const option of extraStockOptions) {
+      byBalance.set(option.id, {
+        shape_design_id: option.shape_design_id,
+        bindi_colour_id: option.bindi_colour_id,
+        size_id: option.size_id,
+        gross_qty: option.available_qty,
+        available_qty: option.available_qty,
+        committed_qty: 0,
+      })
+    }
+
+    for (const ol of openLines) {
+      for (const option of ol.stock_options) {
+        const existing = byBalance.get(option.id)
+        byBalance.set(option.id, {
+          shape_design_id: option.shape_design_id,
+          bindi_colour_id: option.bindi_colour_id,
+          size_id: option.size_id,
+          gross_qty: Math.max(existing?.gross_qty ?? 0, option.available_qty),
+          available_qty: Math.max(existing?.available_qty ?? 0, option.available_qty),
+          committed_qty: existing?.committed_qty ?? 0,
+        })
+      }
+    }
+
+    return [...byBalance.values()].filter((row) => row.available_qty > 0)
+  }, [extraStockOptions, openLines])
+
   // Build availability map: (design|colour|size) → total available qty
   const availableByCell = useMemo(() => {
     const map = new Map<string, number>()
-    for (const ol of openLines) {
-      const key = `${ol.shape_design_id}|${ol.bindi_colour_id}|${ol.size_id}`
-      const avail = ol.stock_options.reduce((s, o) => s + o.available_qty, 0)
-      map.set(key, (map.get(key) ?? 0) + avail)
+    for (const row of availableStockRows) {
+      const key = `${row.shape_design_id}|${row.bindi_colour_id}|${row.size_id}`
+      map.set(key, (map.get(key) ?? 0) + row.available_qty)
     }
     return map
-  }, [openLines])
+  }, [availableStockRows])
 
   // Build open qty map: (design|colour|size) → total open qty across lines
   const openQtyByCell = useMemo(() => {
@@ -179,17 +220,6 @@ export function DispatchForm({
     }
     return map
   }, [openLines])
-
-  const stockBalanceRows = openLines
-    .filter((ol) => ol.stock_options.length > 0)
-    .map((ol) => ({
-      shape_design_id: ol.shape_design_id,
-      bindi_colour_id: ol.bindi_colour_id,
-      size_id:         ol.size_id,
-      gross_qty:       ol.stock_options.reduce((s, o) => s + o.available_qty, 0),
-      available_qty:   ol.stock_options.reduce((s, o) => s + o.available_qty, 0),
-      committed_qty:   0,
-    }))
 
   const canShowMatrix = sizeMaster.length > 0 && designMaster.length > 0 && colourMaster.length > 0
   const effectiveView = canShowMatrix ? view : 'list'
@@ -215,12 +245,12 @@ export function DispatchForm({
 
   const fullAvailStockMatrix = useMemo(() =>
     canShowMatrix
-      ? buildMatrixFromStockBalances(stockBalanceRows, sizeMaster, designMaster, colourMaster, {
+      ? buildMatrixFromStockBalances(availableStockRows, sizeMaster, designMaster, colourMaster, {
           context_label: 'Available ready stock',
         })
       : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canShowMatrix],
+    [canShowMatrix, availableStockRows],
   )
 
   const filterConfig: FilterConfig = useMemo(() => {
@@ -283,20 +313,31 @@ export function DispatchForm({
 
   // Matrix dispatch lines — computed once, shared between payload and auto-extras display
   const matrixDispatchLines = useMemo(() => {
-    const linesForDispatch: OrderLineForDispatch[] = openLines.map((ol) => ({
-      id: ol.id,
-      shape_design_id: ol.shape_design_id,
-      bindi_colour_id: ol.bindi_colour_id,
-      size_id: ol.size_id,
-      open_qty: ol.open_qty,
-      ready_stock_balance_id: ol.stock_options[0]?.id ?? '',
-      available_stock_qty: ol.stock_options[0]?.available_qty ?? 0,
-    }))
+    const linesForDispatch: OrderLineForDispatch[] = [
+      ...openLines.map((ol) => ({
+        id: ol.id,
+        shape_design_id: ol.shape_design_id,
+        bindi_colour_id: ol.bindi_colour_id,
+        size_id: ol.size_id,
+        open_qty: ol.open_qty,
+        ready_stock_balance_id: ol.stock_options[0]?.id ?? '',
+        available_stock_qty: ol.stock_options[0]?.available_qty ?? 0,
+      })),
+      ...extraStockOptions.map((option) => ({
+        id: `extra:${option.id}`,
+        shape_design_id: option.shape_design_id,
+        bindi_colour_id: option.bindi_colour_id,
+        size_id: option.size_id,
+        open_qty: 0,
+        ready_stock_balance_id: option.id,
+        available_stock_qty: option.available_qty,
+      })),
+    ]
     return parseMatrixToDispatchLines(
       matrixChanges.filter((c) => c.quantity > 0),
       linesForDispatch,
     )
-  }, [matrixChanges, openLines])
+  }, [matrixChanges, openLines, extraStockOptions])
 
   // Matrix payload — memoised so the hidden input value is always in sync with matrixChanges state
   const matrixPayload = useMemo(() => {

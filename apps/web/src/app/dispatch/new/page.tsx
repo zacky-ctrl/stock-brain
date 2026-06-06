@@ -350,6 +350,10 @@ export default async function NewDispatchPage({
       available_qty: Number(rs.available_qty),
       gross_qty: grossQty,
       committed_qty: committedQty,
+      shape_design_id: rs.shape_design_id as string,
+      bindi_colour_id: rs.bindi_colour_id as string,
+      size_id: rs.size_id as string,
+      dabbi_colour_id: rs.dabbi_colour_id as string,
     })
   }
 
