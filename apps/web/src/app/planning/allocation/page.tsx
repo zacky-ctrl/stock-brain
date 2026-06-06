@@ -84,7 +84,13 @@ async function fetchCurrentUserRole(): Promise<string | undefined> {
 
 // ── page ──────────────────────────────────────────────────────
 
-export default async function PlanningAllocationPage() {
+export default async function PlanningAllocationPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sort?: string }>
+}) {
+  const params = await searchParams
+  const sortBy = typeof params.sort === 'string' ? params.sort : 'priority'
   const supabase = createServerSupabaseClient()
   const role = await fetchCurrentUserRole()
 
@@ -196,6 +202,18 @@ export default async function PlanningAllocationPage() {
     }
     return { ...row, best_balance_id: bestBalanceId, best_balance_available: bestAvailable }
   })
+
+  if (sortBy === 'order_date') {
+    enrichedRows.sort((a, b) => a.order_date.localeCompare(b.order_date))
+  } else if (sortBy === 'due_date') {
+    enrichedRows.sort((a, b) => {
+      if (!a.promised_date && !b.promised_date) return 0
+      if (!a.promised_date) return 1
+      if (!b.promised_date) return -1
+      return a.promised_date.localeCompare(b.promised_date)
+    })
+  }
+  // 'priority' = default, already sorted by engine
 
   // ── serialise Maps ────────────────────────────────────────────
   const shapeRecord = Object.fromEntries(shapeMap)
@@ -598,6 +616,7 @@ export default async function PlanningAllocationPage() {
           designs={designList}
           colours={colourList}
           dabbis={dabbiList}
+          sort={sortBy}
           sizeMaster={sizeMaster}
           designMaster={designMaster}
           colourMaster={colourMaster}

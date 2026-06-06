@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { OrderGroupedView } from './OrderGroupedView'
 import type { OrderGroupedViewProps, PlanningRowEnriched } from './OrderGroupedView'
@@ -70,9 +71,11 @@ type FilterBarProps = {
   colours: FilterOption[]
   dabbis: FilterOption[]
   activeCount: number
+  sort: string
+  onSortChange: (v: string) => void
 }
 
-function FilterBar({ filters, onChange, customers, designs, colours, dabbis, activeCount }: FilterBarProps) {
+function FilterBar({ filters, onChange, customers, designs, colours, dabbis, activeCount, sort, onSortChange }: FilterBarProps) {
   const sel: React.CSSProperties = {
     fontSize: 'var(--text-xs)',
     padding: '0.3rem 0.55rem',
@@ -129,6 +132,15 @@ function FilterBar({ filters, onChange, customers, designs, colours, dabbis, act
           style={{ ...sel, padding: '0.25rem 0.4rem' }}
         />
       </div>
+      <select
+        value={sort}
+        onChange={(e) => onSortChange(e.target.value)}
+        style={{ ...sel, borderColor: sort !== 'priority' ? 'var(--accent)' : 'var(--border)' }}
+      >
+        <option value="priority">By Priority</option>
+        <option value="order_date">By Order Date</option>
+        <option value="due_date">By Due Date</option>
+      </select>
       {activeCount > 0 && (
         <button
           onClick={() => onChange(DEFAULT_FILTERS)}
@@ -176,6 +188,7 @@ type Props = Omit<OrderGroupedViewProps, 'rows'> & {
   designs: { id: string; name: string }[]
   colours: { id: string; code: string }[]
   dabbis: { id: string; code: string }[]
+  sort?: string
   // masters for the matrix panel
   sizeMaster: SizeMasterRow[]
   designMaster: DesignMasterRow[]
@@ -195,17 +208,26 @@ export function PlanningViewToggle({
   designs,
   colours,
   dabbis,
+  sort: initialSort = 'priority',
   sizeMaster,
   designMaster,
   colourMaster,
   printTitle,
   ...orderViewProps
 }: Props) {
+  const router = useRouter()
   // 'list' = List view (sub: order|sku), 'matrix' = Matrix view
   const [mainView, setMainView] = useState<'list' | 'matrix'>('list')
   const [subView, setSubView] = useState<'order' | 'sku'>('order')
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS)
   const [hydrated, setHydrated] = useState(false)
+
+  function handleSortChange(value: string) {
+    const params = new URLSearchParams()
+    if (value !== 'priority') params.set('sort', value)
+    const qs = params.toString()
+    router.push(`/planning/allocation${qs ? `?${qs}` : ''}`)
+  }
 
   // Restore from localStorage after mount
   useEffect(() => {
@@ -299,6 +321,8 @@ export function PlanningViewToggle({
         colours={colourOptions}
         dabbis={dabbiOptions}
         activeCount={activeFilterCount}
+        sort={initialSort}
+        onSortChange={handleSortChange}
       />
 
       {/* List view */}

@@ -1,13 +1,9 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { fetchPlanningAllocation } from './planning/allocation/fetchers'
-import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import {
   AlertTriangle,
-  ArrowRight,
-  CheckCircle,
-  ClipboardList,
   PackageX,
   Plus,
   Scissors,
@@ -326,72 +322,6 @@ export default async function DashboardPage() {
         </Card>
       )}
 
-      <section className="dashboard-work-grid">
-        <DashboardPanel
-          title="Ready To Dispatch"
-          count={dispatchOrders.length}
-          color="var(--success)"
-          href="/dispatch"
-          actionLabel="Open Dispatch"
-        >
-          <OrderList
-            emptyText="No orders have ready stock allocated right now."
-            orders={dispatchOrders.slice(0, 6)}
-            qtyLabel="Ready"
-            hrefFor={(order) => `/dispatch/new?order_id=${order.orderId}`}
-            cta="Dispatch"
-            tone="success"
-          />
-        </DashboardPanel>
-
-        <DashboardPanel
-          title="Give To Labour"
-          count={labourOrders.length}
-          color="var(--warning)"
-          href="/planning/labour-issue"
-          actionLabel="Open Labour Issue"
-        >
-          <OrderList
-            emptyText="No cuttings are waiting to be issued to labour."
-            orders={labourOrders.slice(0, 6)}
-            qtyLabel="Issue"
-            hrefFor={() => '/planning/labour-issue'}
-            cta="Issue"
-            tone="warning"
-          />
-        </DashboardPanel>
-
-        <DashboardPanel
-          title="Cut On Machine"
-          count={cutSkus.length}
-          color="var(--info)"
-          href="/planning/cutting-required"
-          actionLabel="Cutting Required"
-        >
-          <SkuList
-            emptyText="No machine cutting is needed from current planning."
-            skus={cutSkus.slice(0, 6)}
-            qtyLabel="Cut"
-            tone="info"
-          />
-        </DashboardPanel>
-
-        <DashboardPanel
-          title="Procure Velvet"
-          count={procureSkus.length}
-          color={procureSkus.length > 0 ? 'var(--danger)' : 'var(--text-secondary)'}
-          href="/planning/cutting-required"
-          actionLabel="Review"
-        >
-          <SkuList
-            emptyText="No velvet procurement block is showing right now."
-            skus={procureSkus.slice(0, 6)}
-            qtyLabel="Blocked"
-            tone="danger"
-          />
-        </DashboardPanel>
-      </section>
-
       <section className="dashboard-lower-grid">
         <div>
           <SectionHeader title="Quick Actions" />
@@ -447,110 +377,6 @@ function CommandSummary({
       <strong>{value}</strong>
       <small>{sub}</small>
     </Link>
-  )
-}
-
-function DashboardPanel({
-  title,
-  count,
-  color,
-  href,
-  actionLabel,
-  children,
-}: {
-  title: string
-  count: number
-  color: string
-  href: string
-  actionLabel: string
-  children: ReactNode
-}) {
-  return (
-    <Card className="dashboard-panel">
-      <SectionHeader
-        title={title}
-        count={count}
-        color={color}
-        actions={
-          <Link href={href} className="dashboard-panel-link">
-            {actionLabel} <ArrowRight size={12} />
-          </Link>
-        }
-      />
-      {children}
-    </Card>
-  )
-}
-
-function OrderList({
-  orders,
-  emptyText,
-  qtyLabel,
-  hrefFor,
-  cta,
-  tone,
-}: {
-  orders: OrderBucket[]
-  emptyText: string
-  qtyLabel: string
-  hrefFor: (order: OrderBucket) => string
-  cta: string
-  tone: 'success' | 'warning'
-}) {
-  if (orders.length === 0) {
-    return <p className="dashboard-empty">{emptyText}</p>
-  }
-
-  return (
-    <div className="dashboard-list">
-      {orders.map((order) => (
-        <Link key={order.orderId} href={hrefFor(order)} className="dashboard-order-item">
-          <span>
-            <strong>{order.customerName}</strong>
-            <small>
-              Open {fmt(order.openQty)} / {qtyLabel} {fmt(order.actionQty)} / {order.lineCount} line{order.lineCount === 1 ? '' : 's'}
-            </small>
-          </span>
-          <Badge variant={tone === 'success' ? 'success' : 'warning'} label={cta} size="sm" />
-        </Link>
-      ))}
-    </div>
-  )
-}
-
-function SkuList({
-  skus,
-  emptyText,
-  qtyLabel,
-  tone,
-}: {
-  skus: SkuBucket[]
-  emptyText: string
-  qtyLabel: string
-  tone: 'info' | 'danger'
-}) {
-  if (skus.length === 0) {
-    return <p className="dashboard-empty">{emptyText}</p>
-  }
-
-  return (
-    <div className="dashboard-list">
-      {skus.map((sku) => (
-        <Link key={sku.key} href="/planning/cutting-required" className="dashboard-order-item">
-          <span>
-            <strong>{sku.shape} / {sku.colour} / {sku.size}</strong>
-            <small>
-              {qtyLabel} {fmt(sku.qty)} gross / {sku.customerCount} customer{sku.customerCount === 1 ? '' : 's'}
-            </small>
-          </span>
-          <Badge
-            variant={tone === 'info' ? 'info' : 'danger'}
-            label={sku.conversionRateMissing ? 'Rate Missing' : qtyLabel}
-            size="sm"
-          />
-        </Link>
-      ))}
-    </div>
   )
 }
 
