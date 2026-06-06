@@ -7,12 +7,13 @@ type AccountingTab = {
 
 const TABS: AccountingTab[] = [
   { href: '/accounting/invoices', label: 'Invoices' },
+  { href: '/accounting/receipts', label: 'Receipts' },
   { href: '/accounting/ledger', label: 'Customer Ledger' },
   { href: '/accounting/journal', label: 'Journal' },
 ]
 
 type Props = {
-  active: 'invoices' | 'ledger' | 'journal'
+  active: 'invoices' | 'receipts' | 'ledger' | 'journal'
 }
 
 export function AccountingTabs({ active }: Props) {
