@@ -14,6 +14,7 @@ export type CustomerSalesRates = {
 export type SalesInvoiceCharges = {
   transport_charges?: number
   other_charges?: number
+  manual_lines_amount?: number
   discount_amount?: number
   round_off_amount?: number
 }
@@ -33,6 +34,7 @@ export type CalculatedSalesInvoice = {
   goods_amount: number
   transport_charges: number
   other_charges: number
+  manual_lines_amount: number
   discount_amount: number
   round_off_amount: number
   total_amount: number
@@ -111,14 +113,15 @@ export function calculateSalesInvoice(
 
   const transportCharges = money(charges.transport_charges ?? 0)
   const otherCharges = money(charges.other_charges ?? 0)
+  const manualLinesAmount = money(charges.manual_lines_amount ?? 0)
   const discountAmount = money(charges.discount_amount ?? 0)
   const roundOffAmount = money(charges.round_off_amount ?? 0)
 
-  if (transportCharges < 0 || otherCharges < 0 || discountAmount < 0) {
+  if (transportCharges < 0 || otherCharges < 0 || manualLinesAmount < 0 || discountAmount < 0) {
     return { ok: false, error: 'Charges and discount cannot be negative' }
   }
 
-  const totalAmount = money(goodsAmount + transportCharges + otherCharges - discountAmount + roundOffAmount)
+  const totalAmount = money(goodsAmount + transportCharges + otherCharges + manualLinesAmount - discountAmount + roundOffAmount)
   if (totalAmount < 0) {
     return { ok: false, error: 'Invoice total cannot be negative' }
   }
@@ -132,6 +135,7 @@ export function calculateSalesInvoice(
       goods_amount: goodsAmount,
       transport_charges: transportCharges,
       other_charges: otherCharges,
+      manual_lines_amount: manualLinesAmount,
       discount_amount: discountAmount,
       round_off_amount: roundOffAmount,
       total_amount: totalAmount,

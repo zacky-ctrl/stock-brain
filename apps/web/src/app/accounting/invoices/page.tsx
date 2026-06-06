@@ -9,7 +9,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { InvoicesTabs } from './InvoicesTabs'
 import { ExpandableChallanCard } from './ExpandableChallanCard'
 
-type Tab = 'challans' | 'drafts' | 'invoices'
+type Tab = 'drafts' | 'invoices'
 
 type InvoiceRow = {
   id: string
@@ -171,10 +171,8 @@ export default async function InvoicesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const params = await searchParams
-  const rawTab = typeof params.tab === 'string' ? params.tab : 'challans'
-  const activeTab: Tab = (rawTab === 'drafts' || rawTab === 'invoices' || rawTab === 'challans')
-    ? rawTab
-    : 'challans'
+  const rawTab = typeof params.tab === 'string' ? params.tab : 'drafts'
+  const activeTab: Tab = rawTab === 'invoices' ? 'invoices' : 'drafts'
 
   const supabase = createServerSupabaseClient()
 
@@ -236,7 +234,6 @@ export default async function InvoicesPage({
     .slice(0, 12)
 
   const counts: Record<Tab, number> = {
-    challans: pendingDispatches.length,
     drafts: drafts.length,
     invoices: issued.length,
   }
@@ -245,7 +242,7 @@ export default async function InvoicesPage({
     <main style={{ padding: '1.5rem 2rem', maxWidth: '1280px' }}>
       <PageHeader
         title="Invoices"
-        subtitle="Challans ready for billing, drafts pending review, and issued invoices."
+        subtitle="Review draft invoices before issuing. Issued invoices are locked and posted to ledger."
       />
 
       {error && (
@@ -258,38 +255,49 @@ export default async function InvoicesPage({
         <InvoicesTabs activeTab={activeTab} counts={counts} />
       </Suspense>
 
-      {activeTab === 'challans' && (
-        <section>
-          {pendingDispatches.length === 0 ? (
-            <EmptyNotice message="No challans are currently waiting to be invoiced." />
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {pendingDispatches.map((dispatch) => {
-                const customer = resolveRef(dispatch.customers)
-                return (
-                  <ExpandableChallanCard
-                    key={dispatch.id}
-                    dispatchId={dispatch.id}
-                    challanNumber={dispatch.challan_number}
-                    dispatchDate={dispatch.dispatch_date}
-                    customerName={customer?.name ?? 'Unknown customer'}
-                    transportName={customer?.transport_name ?? null}
-                    yellowRate={customer?.yellow_rate_per_gross ?? null}
-                    whiteRate={customer?.white_rate_per_gross ?? null}
-                  />
-                )
-              })}
-            </div>
-          )}
-        </section>
-      )}
-
       {activeTab === 'drafts' && (
         <section>
           {drafts.length === 0 ? (
-            <EmptyNotice message="No draft invoices. Create one from the Challans Ready tab." />
+            <EmptyNotice message="No draft invoices pending review." />
           ) : (
             <InvoiceTable invoices={drafts} />
+          )}
+
+          {pendingDispatches.length > 0 && (
+            <details style={{ marginTop: '2rem' }}>
+              <summary
+                style={{
+                  cursor: 'pointer',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 700,
+                  color: 'var(--text-secondary)',
+                  padding: '0.5rem 0',
+                  userSelect: 'none',
+                }}
+              >
+                Unlinked confirmed challans ({pendingDispatches.length})
+              </summary>
+              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', margin: '0.35rem 0 0.75rem' }}>
+                These dispatches have no draft invoice yet. Expand to create one.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {pendingDispatches.map((dispatch) => {
+                  const customer = resolveRef(dispatch.customers)
+                  return (
+                    <ExpandableChallanCard
+                      key={dispatch.id}
+                      dispatchId={dispatch.id}
+                      challanNumber={dispatch.challan_number}
+                      dispatchDate={dispatch.dispatch_date}
+                      customerName={customer?.name ?? 'Unknown customer'}
+                      transportName={customer?.transport_name ?? null}
+                      yellowRate={customer?.yellow_rate_per_gross ?? null}
+                      whiteRate={customer?.white_rate_per_gross ?? null}
+                    />
+                  )
+                })}
+              </div>
+            </details>
           )}
         </section>
       )}

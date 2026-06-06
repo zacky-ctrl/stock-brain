@@ -9,10 +9,13 @@ import { tableTd, tableTh } from '@/lib/ui'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { IssueInvoiceForm } from '../IssueInvoiceForm'
 import { EditDraftInvoiceForm } from '../EditDraftInvoiceForm'
+import { AddManualLineForm } from '../AddManualLineForm'
+import { RemoveManualLineForm } from '../RemoveManualLineForm'
 
 type InvoiceRow = {
   id: string
   invoice_number: string | null
+  customer_id: string
   customer_name_snapshot: string
   entity_name_snapshot: string | null
   address_snapshot: string | null
@@ -28,28 +31,50 @@ type InvoiceRow = {
   other_charges: number | string
   discount_amount: number | string
   round_off_amount: number | string
+  manual_lines_amount: number | string
   total_amount: number | string
   notes: string | null
   issued_at: string | null
   accounting_journal_entry_id: string | null
+  created_at: string
 }
 
 type InvoiceLineRow = {
   id: string
+  line_type: string
   shape_name_snapshot: string
   bindi_colour_code_snapshot: string
   size_code_snapshot: string
   dabbi_colour_code_snapshot: string
   brand_name_snapshot: string | null
-  rate_kind: string
-  quantity_gross: number | string
-  rate_per_gross: number | string
+  rate_kind: string | null
+  quantity_gross: number | string | null
+  rate_per_gross: number | string | null
   line_amount: number | string
+  manual_description: string | null
+  manual_reason: string | null
 }
 
 type DispatchLinkRow = {
   dispatch_event_id: string
-  dispatch_events: { id: string; challan_number: string | null; dispatch_date: string } | { id: string; challan_number: string | null; dispatch_date: string }[] | null
+  dispatch_events: {
+    id: string
+    challan_number: string | null
+    dispatch_date: string
+    status: string
+    updated_at: string
+  } | {
+    id: string
+    challan_number: string | null
+    dispatch_date: string
+    status: string
+    updated_at: string
+  }[] | null
+}
+
+type CustomerRow = {
+  yellow_rate_per_gross: number | string | null
+  white_rate_per_gross: number | string | null
 }
 
 type PrintMatrixGroup = {
@@ -110,14 +135,15 @@ function sortSizeCodes(sizeCodes: string[]): string[] {
 }
 
 function buildPrintMatrixGroups(lines: InvoiceLineRow[]): { groups: PrintMatrixGroup[]; sizeCodes: string[] } {
-  const sizeCodes = sortSizeCodes([...new Set(lines.map((line) => line.size_code_snapshot))])
+  const dispatchLines = lines.filter((l) => l.line_type === 'dispatch')
+  const sizeCodes = sortSizeCodes([...new Set(dispatchLines.map((line) => line.size_code_snapshot))])
   const groupsByKey = new Map<string, PrintMatrixGroup>()
 
-  for (const line of lines) {
+  for (const line of dispatchLines) {
     const groupKey = `${line.dabbi_colour_code_snapshot}__${line.brand_name_snapshot ?? '-'}__${line.rate_kind}`
     const group = groupsByKey.get(groupKey) ?? {
       key: groupKey,
-      title: `${line.dabbi_colour_code_snapshot} / ${line.brand_name_snapshot ?? '-'} / ${line.rate_kind.toUpperCase()}`,
+      title: `${line.dabbi_colour_code_snapshot} / ${line.brand_name_snapshot ?? '-'} / ${(line.rate_kind ?? 'manual').toUpperCase()}`,
       rows: [],
       total: 0,
     }
@@ -135,7 +161,7 @@ function buildPrintMatrixGroups(lines: InvoiceLineRow[]): { groups: PrintMatrixG
       group.rows.push(row)
     }
 
-    const quantity = Number(line.quantity_gross)
+    const quantity = Number(line.quantity_gross ?? 0)
     row.quantities.set(line.size_code_snapshot, (row.quantities.get(line.size_code_snapshot) ?? 0) + quantity)
     row.total += quantity
     group.total += quantity
@@ -153,17 +179,18 @@ function buildPrintMatrixGroups(lines: InvoiceLineRow[]): { groups: PrintMatrixG
 function buildRateSummary(lines: InvoiceLineRow[]): RateSummaryRow[] {
   const byRateKind = new Map<string, RateSummaryRow>()
 
-  for (const line of lines) {
-    const existing = byRateKind.get(line.rate_kind) ?? {
-      rateKind: line.rate_kind,
+  for (const line of lines.filter((l) => l.line_type === 'dispatch')) {
+    const rateKind = line.rate_kind ?? 'unknown'
+    const existing = byRateKind.get(rateKind) ?? {
+      rateKind,
       gross: 0,
-      rate: Number(line.rate_per_gross),
+      rate: Number(line.rate_per_gross ?? 0),
       amount: 0,
     }
 
-    existing.gross += Number(line.quantity_gross)
+    existing.gross += Number(line.quantity_gross ?? 0)
     existing.amount += Number(line.line_amount)
-    byRateKind.set(line.rate_kind, existing)
+    byRateKind.set(rateKind, existing)
   }
 
   return [...byRateKind.values()].sort((a, b) => a.rateKind.localeCompare(b.rateKind))
@@ -178,6 +205,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     .select(`
       id,
       invoice_number,
+      customer_id,
       customer_name_snapshot,
       entity_name_snapshot,
       address_snapshot,
@@ -193,10 +221,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       other_charges,
       discount_amount,
       round_off_amount,
+      manual_lines_amount,
       total_amount,
       notes,
       issued_at,
-      accounting_journal_entry_id
+      accounting_journal_entry_id,
+      created_at
     `)
     .eq('id', id)
     .single()
@@ -209,6 +239,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     .from('sales_invoice_lines')
     .select(`
       id,
+      line_type,
       shape_name_snapshot,
       bindi_colour_code_snapshot,
       size_code_snapshot,
@@ -217,7 +248,9 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       rate_kind,
       quantity_gross,
       rate_per_gross,
-      line_amount
+      line_amount,
+      manual_description,
+      manual_reason
     `)
     .eq('sales_invoice_id', id)
     .order('created_at')
@@ -229,12 +262,25 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       dispatch_events (
         id,
         challan_number,
-        dispatch_date
+        dispatch_date,
+        status,
+        updated_at
       )
     `)
     .eq('sales_invoice_id', id)
 
+  // Fetch customer master rates for the rate-diff warning in the edit form
+  const { data: customerRaw } = await supabase
+    .from('customers')
+    .select('yellow_rate_per_gross, white_rate_per_gross')
+    .eq('id', invoice.customer_id)
+    .single()
+
+  const customer = customerRaw as unknown as CustomerRow | null
+
   const lines = (linesRaw ?? []) as unknown as InvoiceLineRow[]
+  const dispatchLines = lines.filter((l) => l.line_type === 'dispatch')
+  const manualLines = lines.filter((l) => l.line_type === 'manual')
   const dispatchLinks = (dispatchLinksRaw ?? []) as unknown as DispatchLinkRow[]
   const pageTitle = invoice.invoice_number ?? 'Draft Invoice'
   const primaryDispatch = resolveRef(dispatchLinks[0]?.dispatch_events)
@@ -246,6 +292,28 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const rateSummaryGridStyle = {
     gridTemplateColumns: '1.15fr 0.7fr 1fr 1.15fr',
   }
+
+  // Dispatch status warnings
+  const dispatchVoided = dispatchLinks.some((link) => {
+    const de = resolveRef(link.dispatch_events)
+    return de?.status === 'voided'
+  })
+  const dispatchChangedAfterDraft = !dispatchVoided && dispatchLinks.some((link) => {
+    const de = resolveRef(link.dispatch_events)
+    if (!de) return false
+    return de.updated_at > invoice.created_at
+  })
+
+  const canIssue = invoice.status === 'draft' && !dispatchVoided
+
+  const customerYellowRate =
+    customer?.yellow_rate_per_gross !== null && customer?.yellow_rate_per_gross !== undefined
+      ? Number(customer.yellow_rate_per_gross)
+      : null
+  const customerWhiteRate =
+    customer?.white_rate_per_gross !== null && customer?.white_rate_per_gross !== undefined
+      ? Number(customer.white_rate_per_gross)
+      : null
 
   return (
     <main style={{ padding: '1.5rem 2rem', maxWidth: '1200px' }}>
@@ -268,6 +336,39 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             </div>
           }
         />
+
+        {dispatchVoided && (
+          <div
+            style={{
+              padding: '0.75rem 1rem',
+              background: 'var(--danger-bg, #fef2f2)',
+              border: '1px solid var(--danger)',
+              borderRadius: 'var(--radius)',
+              marginBottom: '1rem',
+              fontSize: 'var(--text-sm)',
+              fontWeight: 700,
+              color: 'var(--danger)',
+            }}
+          >
+            Linked challan was voided. This draft cannot be issued.
+          </div>
+        )}
+
+        {dispatchChangedAfterDraft && (
+          <div
+            style={{
+              padding: '0.75rem 1rem',
+              background: 'var(--warning-bg, #fffbeb)',
+              border: '1px solid var(--warning)',
+              borderRadius: 'var(--radius)',
+              marginBottom: '1rem',
+              fontSize: 'var(--text-sm)',
+              color: 'var(--warning)',
+            }}
+          >
+            <strong>Linked challan changed after this draft was created.</strong> Review line items carefully before issuing.
+          </div>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.25fr) minmax(280px, 0.75fr)', gap: '1rem', marginBottom: '1.5rem' }}>
           <Card>
@@ -308,61 +409,90 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           </Card>
         </div>
 
-        <div className="desktop-table-card" style={{ overflowX: 'auto', marginBottom: '1.5rem' }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '840px' }}>
-            <thead>
-              <tr>
-                <th style={tableTh}>Shape</th>
-                <th style={tableTh}>CLR</th>
-                <th style={tableTh}>Size</th>
-                <th style={tableTh}>Dabbi</th>
-                <th style={tableTh}>Brand</th>
-                <th style={tableTh}>Rate</th>
-                <th style={{ ...tableTh, textAlign: 'right' }}>Qty</th>
-                <th style={{ ...tableTh, textAlign: 'right' }}>Rate / Gross</th>
-                <th style={{ ...tableTh, textAlign: 'right' }}>Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((line) => (
-                <tr key={line.id}>
-                  <td style={{ ...tableTd, fontWeight: 700 }}>{line.shape_name_snapshot}</td>
-                  <td style={tableTd}>{line.bindi_colour_code_snapshot}</td>
-                  <td style={tableTd}>{line.size_code_snapshot}</td>
-                  <td style={tableTd}>{line.dabbi_colour_code_snapshot}</td>
-                  <td style={tableTd}>{line.brand_name_snapshot ?? '-'}</td>
-                  <td style={tableTd}><Badge variant="neutral" label={line.rate_kind} size="sm" /></td>
-                  <td style={{ ...tableTd, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{qty(line.quantity_gross)}</td>
-                  <td style={{ ...tableTd, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(line.rate_per_gross)}</td>
-                  <td style={{ ...tableTd, textAlign: 'right', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{money(line.line_amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {/* Dispatch-backed lines */}
+        {dispatchLines.length > 0 && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--text-secondary)' }}>Dispatch-backed lines</span>
+              <Badge variant="neutral" label="Dispatch" size="sm" />
+            </div>
+            <div className="desktop-table-card" style={{ overflowX: 'auto', marginBottom: '1.5rem' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '840px' }}>
+                <thead>
+                  <tr>
+                    <th style={tableTh}>Shape</th>
+                    <th style={tableTh}>CLR</th>
+                    <th style={tableTh}>Size</th>
+                    <th style={tableTh}>Dabbi</th>
+                    <th style={tableTh}>Brand</th>
+                    <th style={tableTh}>Rate</th>
+                    <th style={{ ...tableTh, textAlign: 'right' }}>Qty</th>
+                    <th style={{ ...tableTh, textAlign: 'right' }}>Rate / Gross</th>
+                    <th style={{ ...tableTh, textAlign: 'right' }}>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dispatchLines.map((line) => (
+                    <tr key={line.id}>
+                      <td style={{ ...tableTd, fontWeight: 700 }}>{line.shape_name_snapshot}</td>
+                      <td style={tableTd}>{line.bindi_colour_code_snapshot}</td>
+                      <td style={tableTd}>{line.size_code_snapshot}</td>
+                      <td style={tableTd}>{line.dabbi_colour_code_snapshot}</td>
+                      <td style={tableTd}>{line.brand_name_snapshot ?? '-'}</td>
+                      <td style={tableTd}><Badge variant="neutral" label={line.rate_kind ?? '-'} size="sm" /></td>
+                      <td style={{ ...tableTd, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{qty(line.quantity_gross ?? 0)}</td>
+                      <td style={{ ...tableTd, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(line.rate_per_gross)}</td>
+                      <td style={{ ...tableTd, textAlign: 'right', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{money(line.line_amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
 
-        <div className="mobile-card-list" style={{ marginBottom: '1.5rem' }}>
-          {lines.map((line) => (
-            <Card key={line.id} className="mobile-data-card" padding="sm">
-              <div className="mobile-card-top">
-                <div style={{ minWidth: 0 }}>
-                  <div className="mobile-card-title">
-                    {line.shape_name_snapshot} / {line.bindi_colour_code_snapshot} / {line.size_code_snapshot}
-                  </div>
-                  <div className="mobile-card-meta">
-                    {line.dabbi_colour_code_snapshot} · {line.brand_name_snapshot ?? '-'}
-                  </div>
-                </div>
-                <Badge variant="neutral" label={line.rate_kind} size="sm" />
-              </div>
-              <div className="mobile-card-grid">
-                <div><span className="mobile-card-label">Qty</span><strong className="mobile-card-value">{qty(line.quantity_gross)}</strong></div>
-                <div><span className="mobile-card-label">Rate</span><strong className="mobile-card-value">{money(line.rate_per_gross)}</strong></div>
-                <div><span className="mobile-card-label">Amount</span><strong className="mobile-card-value">{money(line.line_amount)}</strong></div>
-              </div>
-            </Card>
-          ))}
-        </div>
+        {/* Manual invoice lines */}
+        {manualLines.length > 0 && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--text-secondary)' }}>Manual lines</span>
+              <Badge variant="warning" label="Manual" size="sm" />
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Accounting-only. Do not affect stock.</span>
+            </div>
+            <div className="desktop-table-card" style={{ overflowX: 'auto', marginBottom: '1.5rem' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '600px' }}>
+                <thead>
+                  <tr>
+                    <th style={tableTh}>Description</th>
+                    <th style={tableTh}>Reason</th>
+                    <th style={{ ...tableTh, textAlign: 'right' }}>Amount</th>
+                    {invoice.status === 'draft' && <th style={tableTh}>Action</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {manualLines.map((line) => (
+                    <tr key={line.id}>
+                      <td style={{ ...tableTd, fontWeight: 700 }}>{line.manual_description}</td>
+                      <td style={{ ...tableTd, color: 'var(--text-secondary)' }}>{line.manual_reason}</td>
+                      <td style={{ ...tableTd, textAlign: 'right', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{money(line.line_amount)}</td>
+                      {invoice.status === 'draft' && (
+                        <td style={tableTd}>
+                          <RemoveManualLineForm invoiceId={invoice.id} lineId={line.id} />
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {invoice.status === 'draft' && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <AddManualLineForm invoiceId={invoice.id} />
+          </div>
+        )}
 
         <Card style={{ marginLeft: 'auto', maxWidth: '440px', marginBottom: '1.5rem' }}>
           <div style={{ display: 'grid', gap: '0.5rem', fontSize: 'var(--text-sm)' }}>
@@ -378,6 +508,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               <span style={{ color: 'var(--text-secondary)' }}>Manual addition</span>
               <strong>{money(invoice.other_charges)}</strong>
             </div>
+            {Number(invoice.manual_lines_amount) > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Manual lines</span>
+                <strong>{money(invoice.manual_lines_amount)}</strong>
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: 'var(--text-secondary)' }}>Discount</span>
               <strong>- {money(invoice.discount_amount)}</strong>
@@ -406,17 +542,29 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             <p style={{ margin: '0 0 0.9rem', color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
               Adjust rates, dates, transport, discount, round off, or a manual addition before issuing.
             </p>
-            <EditDraftInvoiceForm invoice={invoice} />
+            <EditDraftInvoiceForm
+              invoice={invoice}
+              customerYellowRate={customerYellowRate}
+              customerWhiteRate={customerWhiteRate}
+            />
           </Card>
         )}
 
         {invoice.status === 'draft' && (
           <Card>
             <h3 style={{ margin: '0 0 0.35rem', fontSize: 'var(--text-base)' }}>Issue invoice</h3>
-            <p style={{ margin: '0 0 0.9rem', color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
-              This will generate the invoice number and post the customer ledger debit.
-            </p>
-            <IssueInvoiceForm invoiceId={invoice.id} />
+            {canIssue ? (
+              <>
+                <p style={{ margin: '0 0 0.9rem', color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
+                  This will generate the invoice number and post the customer ledger debit.
+                </p>
+                <IssueInvoiceForm invoiceId={invoice.id} />
+              </>
+            ) : (
+              <p style={{ margin: 0, color: 'var(--danger)', fontSize: 'var(--text-sm)', fontWeight: 700 }}>
+                Cannot issue: linked challan has been voided.
+              </p>
+            )}
           </Card>
         )}
       </div>
@@ -505,6 +653,25 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           ))}
         </section>
 
+        {/* Manual lines in print */}
+        {manualLines.length > 0 && (
+          <section className="invoice-print-section">
+            <h3>Manual / Adjustment Lines</h3>
+            <div className="invoice-print-manual-grid">
+              <div className="invoice-print-manual-row invoice-print-manual-head">
+                <div>Description</div>
+                <div>Amount</div>
+              </div>
+              {manualLines.map((line) => (
+                <div key={line.id} className="invoice-print-manual-row">
+                  <div>{line.manual_description}</div>
+                  <div>{money(line.line_amount)}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="invoice-print-bottom">
           <div>
             <h3>Rate Summary</h3>
@@ -533,6 +700,9 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             <div><span>Goods amount</span><strong>{money(invoice.goods_amount)}</strong></div>
             <div><span>Transport</span><strong>{money(invoice.transport_charges)}</strong></div>
             <div><span>Manual addition</span><strong>{money(invoice.other_charges)}</strong></div>
+            {Number(invoice.manual_lines_amount) > 0 && (
+              <div><span>Manual lines</span><strong>{money(invoice.manual_lines_amount)}</strong></div>
+            )}
             <div><span>Discount</span><strong>- {money(invoice.discount_amount)}</strong></div>
             <div><span>Round off</span><strong>{money(invoice.round_off_amount)}</strong></div>
             <div className="invoice-print-grand-total"><span>Total</span><strong>{money(invoice.total_amount)}</strong></div>
@@ -729,18 +899,32 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           }
 
           .invoice-print-matrix-grid,
-          .invoice-print-rate-grid {
+          .invoice-print-rate-grid,
+          .invoice-print-manual-grid {
             border-top: 1px solid #111;
             border-left: 1px solid #111;
           }
 
           .invoice-print-matrix-row,
-          .invoice-print-rate-row {
+          .invoice-print-rate-row,
+          .invoice-print-manual-row {
             display: grid;
           }
 
+          .invoice-print-manual-row {
+            grid-template-columns: 1fr 40mm;
+          }
+
+          .invoice-print-manual-head > div {
+            background: #f2f2f2 !important;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+          }
+
           .invoice-print-matrix-row > div,
-          .invoice-print-rate-row > div {
+          .invoice-print-rate-row > div,
+          .invoice-print-manual-row > div {
             border: 1px solid #111 !important;
             border-top: 0 !important;
             border-left: 0 !important;
@@ -750,6 +934,11 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             font-size: 8pt;
             min-width: 0;
             box-sizing: border-box;
+          }
+
+          .invoice-print-manual-row > div:last-child {
+            text-align: right;
+            font-weight: 700;
           }
 
           .invoice-print-matrix-head > div,

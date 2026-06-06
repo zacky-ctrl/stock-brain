@@ -3,10 +3,9 @@
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 
-type Tab = 'challans' | 'drafts' | 'invoices'
+type Tab = 'drafts' | 'invoices'
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'challans', label: 'Challans Ready' },
   { id: 'drafts', label: 'Drafts' },
   { id: 'invoices', label: 'Invoices' },
 ]

@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
 import { Save } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import type { ActionState } from '@/lib/masters'
@@ -19,6 +19,8 @@ type Props = {
     round_off_amount: number | string
     notes: string | null
   }
+  customerYellowRate: number | null
+  customerWhiteRate: number | null
 }
 
 const fieldStyle = {
@@ -32,15 +34,56 @@ const inputStyle = {
   minHeight: '2.5rem',
 } as const
 
-export function EditDraftInvoiceForm({ invoice }: Props) {
+export function EditDraftInvoiceForm({ invoice, customerYellowRate, customerWhiteRate }: Props) {
   const [state, formAction, isPending] = useActionState<ActionState, FormData>(
     updateDraftInvoiceAction,
     null,
   )
 
+  const currentYellow = invoice.yellow_rate_per_gross !== null ? Number(invoice.yellow_rate_per_gross) : null
+  const currentWhite = invoice.white_rate_per_gross !== null ? Number(invoice.white_rate_per_gross) : null
+
+  const [yellowInput, setYellowInput] = useState(String(currentYellow ?? ''))
+  const [whiteInput, setWhiteInput] = useState(String(currentWhite ?? ''))
+
+  const yellowDiffersFromMaster =
+    customerYellowRate !== null &&
+    yellowInput !== '' &&
+    Number(yellowInput) !== customerYellowRate
+
+  const whiteDiffersFromMaster =
+    customerWhiteRate !== null &&
+    whiteInput !== '' &&
+    Number(whiteInput) !== customerWhiteRate
+
+  const rateModified = yellowDiffersFromMaster || whiteDiffersFromMaster
+
   return (
     <form action={formAction} style={{ display: 'grid', gap: '0.9rem' }}>
       <input type="hidden" name="invoice_id" value={invoice.id} />
+
+      {rateModified && (
+        <div
+          style={{
+            padding: '0.65rem 0.9rem',
+            background: 'var(--warning-bg, #fffbeb)',
+            border: '1px solid var(--warning, #d97706)',
+            borderRadius: 'var(--radius)',
+            fontSize: 'var(--text-sm)',
+            color: 'var(--warning, #92400e)',
+          }}
+        >
+          <strong>Rate differs from customer master.</strong>{' '}
+          {yellowDiffersFromMaster && (
+            <span>Yellow: master = {customerYellowRate}. </span>
+          )}
+          {whiteDiffersFromMaster && (
+            <span>White: master = {customerWhiteRate}. </span>
+          )}
+          A reason is required when saving with modified rates.
+        </div>
+      )}
+
       <div
         style={{
           display: 'grid',
@@ -61,31 +104,51 @@ export function EditDraftInvoiceForm({ invoice }: Props) {
           <input name="due_date" type="date" defaultValue={invoice.due_date ?? ''} style={inputStyle} />
         </label>
         <label style={fieldStyle}>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 700 }}>
-            Yellow Rate / Gross
+          <span
+            style={{
+              fontSize: 'var(--text-xs)',
+              color: yellowDiffersFromMaster ? 'var(--warning)' : 'var(--text-secondary)',
+              fontWeight: 700,
+            }}
+          >
+            Yellow Rate / Gross{yellowDiffersFromMaster ? ' ⚠' : ''}
           </span>
           <input
             name="yellow_rate_per_gross"
             type="number"
             step="0.01"
             min="0"
-            defaultValue={invoice.yellow_rate_per_gross ?? ''}
+            value={yellowInput}
+            onChange={(e) => setYellowInput(e.target.value)}
             required
-            style={inputStyle}
+            style={{
+              ...inputStyle,
+              borderColor: yellowDiffersFromMaster ? 'var(--warning)' : undefined,
+            }}
           />
         </label>
         <label style={fieldStyle}>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 700 }}>
-            White Rate / Gross
+          <span
+            style={{
+              fontSize: 'var(--text-xs)',
+              color: whiteDiffersFromMaster ? 'var(--warning)' : 'var(--text-secondary)',
+              fontWeight: 700,
+            }}
+          >
+            White Rate / Gross{whiteDiffersFromMaster ? ' ⚠' : ''}
           </span>
           <input
             name="white_rate_per_gross"
             type="number"
             step="0.01"
             min="0"
-            defaultValue={invoice.white_rate_per_gross ?? ''}
+            value={whiteInput}
+            onChange={(e) => setWhiteInput(e.target.value)}
             required
-            style={inputStyle}
+            style={{
+              ...inputStyle,
+              borderColor: whiteDiffersFromMaster ? 'var(--warning)' : undefined,
+            }}
           />
         </label>
         <label style={fieldStyle}>
@@ -115,12 +178,13 @@ export function EditDraftInvoiceForm({ invoice }: Props) {
       </div>
       <label style={fieldStyle}>
         <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 700 }}>
-          Notes / Reason
+          Notes / Reason{rateModified ? ' *' : ''}
         </span>
         <input
           name="notes"
           defaultValue={invoice.notes ?? ''}
-          placeholder="Why rates or amount were changed"
+          placeholder={rateModified ? 'Required: reason for rate change' : 'Invoice review note'}
+          required={rateModified}
           style={inputStyle}
         />
       </label>
