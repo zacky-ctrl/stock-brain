@@ -209,6 +209,11 @@ export default async function InvoicesPage({
           <p style={{ margin: 0, color: 'var(--warning)', fontSize: 'var(--text-sm)', fontWeight: 800 }}>
             {autoDraftResult.errors.length} challan{autoDraftResult.errors.length === 1 ? '' : 's'} could not become draft invoices automatically. Check dispatch line master data before issuing.
           </p>
+          <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1rem', color: 'var(--text-secondary)', fontSize: 'var(--text-xs)' }}>
+            {autoDraftResult.errors.slice(0, 5).map((message) => (
+              <li key={message}>{message}</li>
+            ))}
+          </ul>
         </Card>
       )}
 

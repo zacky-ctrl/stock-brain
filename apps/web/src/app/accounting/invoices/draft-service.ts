@@ -1,5 +1,6 @@
 import {
   calculateSalesInvoice,
+  resolveSalesRateKind,
   type CalculatedSalesInvoiceLine,
   type SalesInvoiceSourceLine,
 } from '@stock-brain/domain'
@@ -53,7 +54,6 @@ type DispatchLineRow = {
   order_line_id: string | null
   ready_stock_balance_id: string
   quantity_dispatched: number | string
-  ready_stock_balance: ReadyStockBalanceRow | ReadyStockBalanceRow[] | null
 }
 
 type ExistingInvoiceLink = {
@@ -129,6 +129,47 @@ function lineById(
   return lines.find((line) => line.source_line_id === sourceLineId) ?? null
 }
 
+function normalisedDabbiCode(ref: MasterRef | null): string | null {
+  const raw = `${ref?.code ?? ''} ${ref?.name ?? ''}`.trim().toUpperCase()
+  if (!raw) return null
+  if (raw.includes('YELLOW')) return 'YELLOW'
+  if (raw.includes('WHITE')) return 'WHITE'
+  if (resolveSalesRateKind(raw)) return raw
+  return null
+}
+
+async function fetchReadyStockBalances(
+  supabase: SupabaseClient,
+  balanceIds: string[],
+): Promise<Map<string, ReadyStockBalanceRow>> {
+  if (balanceIds.length === 0) return new Map()
+
+  const { data, error } = await supabase
+    .from('ready_stock_balance')
+    .select(`
+      id,
+      shape_design_id,
+      bindi_colour_id,
+      size_id,
+      dabbi_colour_id,
+      brand_id,
+      shape_design:shape_design_id (id, name),
+      bindi_colour:bindi_colour_id (id, code),
+      size:size_id (id, code),
+      dabbi_colour:dabbi_colour_id (id, code, name),
+      brand:brand_id (id, name)
+    `)
+    .in('id', balanceIds)
+
+  if (error) throw new Error(error.message)
+
+  const balances = new Map<string, ReadyStockBalanceRow>()
+  for (const row of (data ?? []) as unknown as ReadyStockBalanceRow[]) {
+    balances.set(row.id, row)
+  }
+  return balances
+}
+
 export async function createDraftInvoiceForDispatch(
   supabase: SupabaseClient,
   input: DraftInvoiceCreateInput,
@@ -192,20 +233,7 @@ export async function createDraftInvoiceForDispatch(
       id,
       order_line_id,
       ready_stock_balance_id,
-      quantity_dispatched,
-      ready_stock_balance:ready_stock_balance_id (
-        id,
-        shape_design_id,
-        bindi_colour_id,
-        size_id,
-        dabbi_colour_id,
-        brand_id,
-        shape_design:shape_design_id (id, name),
-        bindi_colour:bindi_colour_id (id, code),
-        size:size_id (id, code),
-        dabbi_colour:dabbi_colour_id (id, code, name),
-        brand:brand_id (id, name)
-      )
+      quantity_dispatched
     `)
     .eq('dispatch_event_id', input.dispatchId)
     .order('created_at')
@@ -215,13 +243,23 @@ export async function createDraftInvoiceForDispatch(
   const dispatchLines = (dispatchLinesRaw ?? []) as unknown as DispatchLineRow[]
   if (dispatchLines.length === 0) return { ok: false, error: 'Dispatch has no lines to invoice' }
 
+  let balancesById: Map<string, ReadyStockBalanceRow>
+  try {
+    balancesById = await fetchReadyStockBalances(
+      supabase,
+      [...new Set(dispatchLines.map((line) => line.ready_stock_balance_id))],
+    )
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Could not read ready stock master data' }
+  }
+
   const sourceLines: SalesInvoiceSourceLine[] = []
   for (const line of dispatchLines) {
-    const balance = resolveRef(line.ready_stock_balance)
+    const balance = balancesById.get(line.ready_stock_balance_id) ?? null
     const dabbi = resolveRef(balance?.dabbi_colour)
-    const dabbiCode = dabbi?.code
+    const dabbiCode = normalisedDabbiCode(dabbi)
     if (!balance || !dabbiCode) {
-      return { ok: false, error: `Dispatch line ${line.id.slice(0, 8)} is missing dabbi colour data` }
+      return { ok: false, error: `Dispatch line ${line.id.slice(0, 8)} is missing usable dabbi colour data` }
     }
     sourceLines.push({
       id: line.id,
@@ -296,14 +334,15 @@ export async function createDraftInvoiceForDispatch(
   const invoiceLines: SalesInvoiceLineInsert[] = []
   for (const line of dispatchLines) {
     const calculated = lineById(invoice.lines, line.id)
-    const balance = resolveRef(line.ready_stock_balance)
+    const balance = balancesById.get(line.ready_stock_balance_id) ?? null
     const shape = resolveRef(balance?.shape_design)
     const colour = resolveRef(balance?.bindi_colour)
     const size = resolveRef(balance?.size)
     const dabbi = resolveRef(balance?.dabbi_colour)
     const brand = resolveRef(balance?.brand)
+    const dabbiCode = normalisedDabbiCode(dabbi)
 
-    if (!calculated || !balance || !shape?.name || !colour?.code || !size?.code || !dabbi?.code) {
+    if (!calculated || !balance || !shape?.name || !colour?.code || !size?.code || !dabbiCode) {
       await supabase.from('sales_invoice_dispatches').delete().eq('sales_invoice_id', created.id)
       await supabase.from('sales_invoices').delete().eq('id', created.id)
       return { ok: false, error: `Dispatch line ${line.id.slice(0, 8)} cannot be converted to an invoice line` }
@@ -322,7 +361,7 @@ export async function createDraftInvoiceForDispatch(
       shape_name_snapshot: shape.name,
       bindi_colour_code_snapshot: colour.code,
       size_code_snapshot: size.code,
-      dabbi_colour_code_snapshot: dabbi.code,
+      dabbi_colour_code_snapshot: dabbiCode,
       brand_name_snapshot: brand?.name ?? null,
       line_type: 'dispatch',
       rate_kind: calculated.rate_kind,
@@ -375,7 +414,7 @@ export async function ensureDraftInvoicesForConfirmedDispatches(
     if (result.ok) {
       if (!result.alreadyExisted) created += 1
     } else {
-      errors.push(result.error)
+      errors.push(`${dispatchId.slice(0, 8)}: ${result.error}`)
     }
   }
 
