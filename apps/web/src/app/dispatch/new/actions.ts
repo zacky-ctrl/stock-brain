@@ -7,6 +7,7 @@ import { createDispatch, releaseReservation } from '@stock-brain/domain'
 import { createSupabaseDispatchStore } from '@/lib/dispatch-store'
 import { createSupabaseReservationStore } from '@/lib/reservation-store'
 import type { ActionState } from '@/lib/masters'
+import { createDraftInvoiceForDispatch } from '../../accounting/invoices/draft-service'
 
 type FormDispatchLine = {
   order_id?: string | null
@@ -220,6 +221,7 @@ export async function createDispatchAction(
   let extrasAttached = false
   let firstDispatchId: string | null = null
   let firstOrderId: string | null = null
+  const createdDispatchIds: string[] = []
   for (const [order_id, lines] of linesByOrder) {
     const linesForCall = lines.map((l) => ({
       order_line_id: l.order_line_id ?? null,
@@ -252,6 +254,7 @@ export async function createDispatchAction(
       if (!result.success) return { error: result.error }
       firstDispatchId ??= result.dispatch_id
       firstOrderId ??= order_id
+      createdDispatchIds.push(result.dispatch_id)
     } catch (err) {
       return { error: err instanceof Error ? err.message : 'Dispatch failed unexpectedly' }
     }
@@ -282,6 +285,7 @@ export async function createDispatchAction(
       )
       if (!result.success) return { error: result.error }
       firstDispatchId ??= result.dispatch_id
+      createdDispatchIds.push(result.dispatch_id)
     } catch (err) {
       return { error: err instanceof Error ? err.message : 'Extra dispatch failed unexpectedly' }
     }
@@ -297,6 +301,26 @@ export async function createDispatchAction(
 
   if (!firstDispatchId) {
     return { error: 'Dispatch was not created' }
+  }
+
+  const draftErrors: string[] = []
+  for (const dispatchId of createdDispatchIds) {
+    const draftResult = await createDraftInvoiceForDispatch(supabase, {
+      dispatchId,
+      actor,
+    })
+    if (!draftResult.ok) draftErrors.push(draftResult.error)
+  }
+
+  revalidatePath('/accounting/invoices')
+
+  if (draftErrors.length > 0) {
+    return {
+      success: `Dispatch confirmed. ${draftErrors.length} draft invoice${draftErrors.length === 1 ? '' : 's'} could not be created automatically: ${draftErrors.join('; ')}`,
+      dispatch_id: firstDispatchId,
+      order_id: firstOrderId,
+      remaining_reserved_qty: await getRemainingReservedQty(firstOrderId),
+    }
   }
 
   return {

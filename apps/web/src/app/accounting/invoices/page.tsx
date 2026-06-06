@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { tableTd, tableTh } from '@/lib/ui'
+import { getActorId } from '@/lib/get-actor'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { InvoicesTabs } from './InvoicesTabs'
-import { ExpandableChallanCard } from './ExpandableChallanCard'
+import { ensureDraftInvoicesForConfirmedDispatches } from './draft-service'
 
 type Tab = 'drafts' | 'invoices'
 
@@ -24,25 +25,6 @@ type InvoiceRow = {
   created_at: string
   sales_invoice_dispatches: Array<{
     dispatch_events: { id: string; challan_number: string | null } | { id: string; challan_number: string | null }[] | null
-  }> | null
-}
-
-type PendingDispatchRow = {
-  id: string
-  dispatch_date: string
-  challan_number: string | null
-  customers: {
-    name: string
-    entity_name: string | null
-    transport_name: string | null
-    yellow_rate_per_gross: number | string | null
-    white_rate_per_gross: number | string | null
-  } | Array<{
-    name: string
-    entity_name: string | null
-    transport_name: string | null
-    yellow_rate_per_gross: number | string | null
-    white_rate_per_gross: number | string | null
   }> | null
 }
 
@@ -175,6 +157,8 @@ export default async function InvoicesPage({
   const activeTab: Tab = rawTab === 'invoices' ? 'invoices' : 'drafts'
 
   const supabase = createServerSupabaseClient()
+  const actor = await getActorId()
+  const autoDraftResult = await ensureDraftInvoicesForConfirmedDispatches(supabase, actor)
 
   const { data, error } = await supabase
     .from('sales_invoices')
@@ -203,36 +187,6 @@ export default async function InvoicesPage({
   const drafts = invoices.filter((inv) => inv.status === 'draft')
   const issued = invoices.filter((inv) => inv.status === 'issued')
 
-  const { data: linkedDispatchesRaw } = await supabase
-    .from('sales_invoice_dispatches')
-    .select('dispatch_event_id')
-
-  const linkedDispatchIds = new Set(
-    (linkedDispatchesRaw ?? []).map((row) => row.dispatch_event_id as string),
-  )
-
-  const { data: pendingDispatchesRaw } = await supabase
-    .from('dispatch_events')
-    .select(`
-      id,
-      dispatch_date,
-      challan_number,
-      customers (
-        name,
-        entity_name,
-        transport_name,
-        yellow_rate_per_gross,
-        white_rate_per_gross
-      )
-    `)
-    .eq('status', 'confirmed')
-    .order('dispatch_date', { ascending: false })
-    .limit(100)
-
-  const pendingDispatches = ((pendingDispatchesRaw ?? []) as unknown as PendingDispatchRow[])
-    .filter((dispatch) => !linkedDispatchIds.has(dispatch.id))
-    .slice(0, 12)
-
   const counts: Record<Tab, number> = {
     drafts: drafts.length,
     invoices: issued.length,
@@ -250,6 +204,13 @@ export default async function InvoicesPage({
           {error.message}
         </p>
       )}
+      {autoDraftResult.errors.length > 0 && (
+        <Card padding="sm" style={{ marginBottom: '1rem', borderColor: 'var(--warning)' }}>
+          <p style={{ margin: 0, color: 'var(--warning)', fontSize: 'var(--text-sm)', fontWeight: 800 }}>
+            {autoDraftResult.errors.length} challan{autoDraftResult.errors.length === 1 ? '' : 's'} could not become draft invoices automatically. Check dispatch line master data before issuing.
+          </p>
+        </Card>
+      )}
 
       <Suspense>
         <InvoicesTabs activeTab={activeTab} counts={counts} />
@@ -261,43 +222,6 @@ export default async function InvoicesPage({
             <EmptyNotice message="No draft invoices pending review." />
           ) : (
             <InvoiceTable invoices={drafts} />
-          )}
-
-          {pendingDispatches.length > 0 && (
-            <details style={{ marginTop: '2rem' }}>
-              <summary
-                style={{
-                  cursor: 'pointer',
-                  fontSize: 'var(--text-sm)',
-                  fontWeight: 700,
-                  color: 'var(--text-secondary)',
-                  padding: '0.5rem 0',
-                  userSelect: 'none',
-                }}
-              >
-                Unlinked confirmed challans ({pendingDispatches.length})
-              </summary>
-              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', margin: '0.35rem 0 0.75rem' }}>
-                These dispatches have no draft invoice yet. Expand to create one.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {pendingDispatches.map((dispatch) => {
-                  const customer = resolveRef(dispatch.customers)
-                  return (
-                    <ExpandableChallanCard
-                      key={dispatch.id}
-                      dispatchId={dispatch.id}
-                      challanNumber={dispatch.challan_number}
-                      dispatchDate={dispatch.dispatch_date}
-                      customerName={customer?.name ?? 'Unknown customer'}
-                      transportName={customer?.transport_name ?? null}
-                      yellowRate={customer?.yellow_rate_per_gross ?? null}
-                      whiteRate={customer?.white_rate_per_gross ?? null}
-                    />
-                  )
-                })}
-              </div>
-            </details>
           )}
         </section>
       )}
