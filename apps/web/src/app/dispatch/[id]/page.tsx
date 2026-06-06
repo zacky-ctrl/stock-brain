@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/Button'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { PrintButton } from '@/components/ui/PrintButton'
+import { MatrixGrid } from '@/components/matrix/MatrixGrid'
+import { buildMatrixFromOrderLines } from '@stock-brain/domain'
 import type { CSSProperties } from 'react'
 import Link from 'next/link'
 
@@ -92,6 +94,9 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
       order_line_id,
       ready_stock_balance_id,
       ready_stock_balance:ready_stock_balance_id (
+        shape_design_id,
+        bindi_colour_id,
+        size_id,
         shape_design:shape_design_id (name),
         bindi_colour:bindi_colour_id (code),
         size:size_id (code),
@@ -107,6 +112,9 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
     .order('created_at')
 
   type RsbRow = {
+    shape_design_id: string
+    bindi_colour_id: string
+    size_id: string
     shape_design: { name: string } | null
     bindi_colour: { code: string } | null
     size: { code: string } | null
@@ -128,6 +136,22 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
   }
 
   const lines = (linesRaw ?? []) as unknown as LineRow[]
+
+  // Fetch matrix masters
+  const [shapesResult, bindiResult, sizesResult] = await Promise.allSettled([
+    supabase.from('shape_designs').select('id, code, name, sort_order').order('sort_order'),
+    supabase.from('bindi_colours').select('id, code, name, sort_order').order('sort_order'),
+    supabase.from('sizes').select('id, code, name, sort_order').order('sort_order'),
+  ])
+
+  type LookupRow = { id: string; code: string; name?: string | null; sort_order?: number | null }
+  const shapes = shapesResult.status === 'fulfilled' ? (shapesResult.value.data ?? []) as LookupRow[] : []
+  const bindis = bindiResult.status === 'fulfilled' ? (bindiResult.value.data ?? []) as LookupRow[] : []
+  const sizes = sizesResult.status === 'fulfilled' ? (sizesResult.value.data ?? []) as LookupRow[] : []
+
+  const sizeMaster   = sizes.map((s)  => ({ id: s.id, code: s.code, name: s.name ?? s.code, sort_order: Number(s.sort_order ?? 0) }))
+  const designMaster = shapes.map((s) => ({ id: s.id, name: s.name ?? s.code, sort_order: Number(s.sort_order ?? 0) }))
+  const colourMaster = bindis.map((c) => ({ id: c.id, code: c.code, name: c.name ?? c.code, sort_order: Number(c.sort_order ?? 0) }))
 
   // Separate ordered vs extra lines by line_type
   const extraDispatchLines = lines.filter((l) => l.line_type === 'extra')
@@ -192,6 +216,23 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
   const invoiceId = linkedInvoice?.id ?? invoiceLink?.sales_invoice_id ?? null
   const pageTitle = `Challan — ${challanNumber}`
 
+  // Build Matrix
+  const dispatchAsOrderLines = lines.map(l => {
+    const rsb = resolveRef(l.ready_stock_balance)
+    return {
+      shape_design_id: rsb?.shape_design_id ?? '',
+      bindi_colour_id: rsb?.bindi_colour_id ?? '',
+      size_id: rsb?.size_id ?? '',
+      ordered_qty: Number(l.quantity_dispatched)
+    }
+  }).filter(l => l.shape_design_id && l.bindi_colour_id && l.size_id)
+
+  const matrixData = buildMatrixFromOrderLines(
+    dispatchAsOrderLines,
+    sizeMaster, designMaster, colourMaster,
+    { context_label: 'Dispatched Goods', date_label: dispatchDate }
+  )
+
   return (
     <main style={{ padding: '1.5rem 2rem', maxWidth: '1200px' }}>
       <PageHeader
@@ -213,8 +254,37 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
         }
       />
 
+      {/* Print-Only Header: Single Page Challan layout */}
+      <div className="print-only-header" style={{ display: 'none' }}>
+        <div style={{ textAlign: 'center', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '2px solid #000' }}>
+          <h1 style={{ margin: '0 0 0.5rem 0', fontSize: '18pt', fontWeight: 800 }}>NIRANKARI BINDI</h1>
+          <div style={{ fontSize: '10pt', color: '#444' }}>DELIVERY CHALLAN</div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', fontSize: '9pt', lineHeight: 1.6 }}>
+          <div style={{ flex: 1 }}>
+            <div><strong>To:</strong></div>
+            <div style={{ fontSize: '11pt', fontWeight: 700, margin: '0.2rem 0' }}>{customer?.name ?? '—'}</div>
+            {customer?.entity_name && <div>{customer.entity_name}</div>}
+            {customer?.address && <div style={{ whiteSpace: 'pre-wrap' }}>{customer.address}</div>}
+            {customer?.phone_number && <div>Ph: {customer.phone_number}</div>}
+          </div>
+          <div style={{ flex: 1, textAlign: 'right' }}>
+            <div style={{ marginBottom: '0.2rem' }}><strong>Challan No:</strong> <span style={{ fontSize: '11pt' }}>{challanNumber}</span></div>
+            <div style={{ marginBottom: '0.2rem' }}><strong>Date:</strong> {dispatchDate}</div>
+            {customer?.transport_name && <div><strong>Transport:</strong> {customer.transport_name}</div>}
+            {dispatchRef && <div><strong>Ref:</strong> {dispatchRef}</div>}
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f5f5f5', padding: '0.5rem', border: '1px solid #000', marginBottom: '1.5rem' }}>
+          <div><strong>Total Quantity Sent:</strong> {fmt(totalSentQty)} gross</div>
+          {extrasQty > 0 && <div style={{ fontSize: '8pt' }}>Ordered: {fmt(orderedDispatchedQty)} · Extras: {fmt(extrasQty)}</div>}
+        </div>
+      </div>
+
       {/* Meta */}
-      <Card style={{ marginBottom: '1.5rem' }}>
+      <Card className="no-print" style={{ marginBottom: '1.5rem' }}>
         <div style={metaRow}><span style={metaLabel}>Customer</span><span style={metaValue}>{customer?.name ?? '—'}</span></div>
         {customer?.entity_name && (
           <div style={metaRow}><span style={metaLabel}>Entity</span><span style={metaValue}>{customer.entity_name}</span></div>
@@ -256,14 +326,20 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
       </Card>
 
       {extrasQty > 0 && (
-        <div style={{ padding: '0.6rem 0.9rem', marginBottom: '1.5rem', background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 'var(--radius-sm)', fontSize: '0.82rem', color: 'var(--info)' }}>
+        <div className="no-print" style={{ padding: '0.6rem 0.9rem', marginBottom: '1.5rem', background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 'var(--radius-sm)', fontSize: '0.82rem', color: 'var(--info)' }}>
           This dispatch included <strong>{fmt(extrasQty)} gross</strong> of parcel fillers not linked to order lines.
         </div>
       )}
 
-      {/* Lines — challan table */}
-      <h3 style={{ fontSize: '0.95rem', margin: '0 0 0.75rem' }}>Dispatch Lines</h3>
-      <div className="desktop-table-card" style={{ overflowX: 'auto', marginBottom: '2rem' }}>
+      {/* Matrix View (Visible in print and screen) */}
+      <div className="print-section" style={{ marginBottom: '2.5rem' }}>
+        <h3 className="no-print" style={{ fontSize: '0.95rem', margin: '0 0 0.75rem' }}>Dispatch Matrix</h3>
+        <MatrixGrid data={matrixData} mode="view" />
+      </div>
+
+      {/* Lines — challan table (Hidden on print) */}
+      <h3 className="no-print" style={{ fontSize: '0.95rem', margin: '0 0 0.75rem' }}>Detailed Dispatch Lines</h3>
+      <div className="desktop-table-card no-print" style={{ overflowX: 'auto', marginBottom: '2rem' }}>
         <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '900px' }}>
           <thead>
             <tr>
@@ -339,7 +415,7 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
           </tfoot>
         </table>
       </div>
-      <div className="mobile-card-list" style={{ marginBottom: '2rem' }}>
+      <div className="mobile-card-list no-print" style={{ marginBottom: '2rem' }}>
         {lines.map((l) => {
           const rsb = resolveRef(l.ready_stock_balance)
           const ol = resolveRef(l.order_line)
@@ -390,8 +466,8 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
         })}
       </div>
 
-      {/* Fulfilment summary footer */}
-      <Card style={{ marginBottom: '2rem' }}>
+      {/* Fulfilment summary footer (Hidden on print) */}
+      <Card className="no-print" style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', fontSize: '0.82rem' }}>
           <div>
             <span style={{ color: 'var(--text-secondary)' }}>Fulfilment: </span>
@@ -430,10 +506,59 @@ export default async function DispatchDetailPage({ params }: { params: Promise<{
         />
       )}
       {(event as { status: string }).status === 'voided' && (
-        <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', padding: '0.75rem', background: 'var(--bg-elevated)', border: `1px solid var(--border)` }}>
+        <p className="no-print" style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', padding: '0.75rem', background: 'var(--bg-elevated)', border: `1px solid var(--border)` }}>
           This dispatch has been voided. Stock has been restored.
         </p>
       )}
+
+      {/* Print Signature Block */}
+      <div className="print-signature" style={{ display: 'none', marginTop: '4rem', fontSize: '10pt' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #000', paddingTop: '0.5rem', margin: '0 1rem' }}>
+          <div>Prepared By</div>
+          <div>Checked By</div>
+          <div>Received By</div>
+        </div>
+      </div>
+
+      <style>{`
+        @media print {
+          @page { size: A4 portrait; margin: 15mm; }
+          .no-print, .report-header-screen, .report-filter-bar, nav, header { display: none !important; }
+          
+          main { padding: 0 !important; max-width: 100% !important; background: white !important; }
+          .print-only-header { display: block !important; }
+          .print-signature { display: block !important; }
+
+          /* Print styles for MatrixGrid */
+          .matrix-print-root { overflow: visible !important; max-height: none !important; margin-bottom: 2rem !important; }
+          .matrix-print-root table { border-collapse: collapse !important; width: 100% !important; }
+          .matrix-print-root th,
+          .matrix-print-root td {
+            border: 1px solid #000 !important;
+            padding: 4px 6px !important;
+            font-size: 9pt !important;
+            background: #fff !important;
+            color: #000 !important;
+          }
+          .matrix-header-row th { 
+            background: #f0f0f0 !important; 
+            color: #000 !important;
+            font-weight: bold !important;
+            -webkit-print-color-adjust: exact; 
+            print-color-adjust: exact; 
+          }
+          /* Ensure size columns are somewhat compact */
+          .matrix-print-root th, .matrix-print-root td {
+            text-align: center;
+          }
+          .matrix-print-root td:first-child, .matrix-print-root th:first-child,
+          .matrix-print-root td:nth-child(2), .matrix-print-root th:nth-child(2) {
+            text-align: left;
+          }
+          /* Hide the matrix contextual texts if any, as we have the challan header */
+          .matrix-print-root > div:last-child { display: none !important; }
+        }
+      `}</style>
     </main>
   )
 }
