@@ -21,6 +21,11 @@ type DraftInvoiceRow = {
   manual_lines_amount: number | string
 }
 
+type CustomerRateRow = {
+  yellow_rate_per_gross: number | string | null
+  white_rate_per_gross: number | string | null
+}
+
 type DraftInvoiceLineRow = {
   id: string
   line_type: string
@@ -255,6 +260,22 @@ export async function updateDraftInvoiceAction(
   // Detect rate changes for audit trail
   const oldYellowRate = numberOrNull(draftInvoice.yellow_rate_per_gross)
   const oldWhiteRate = numberOrNull(draftInvoice.white_rate_per_gross)
+  const { data: customerRatesRaw } = await supabase
+    .from('customers')
+    .select('yellow_rate_per_gross, white_rate_per_gross')
+    .eq('id', draftInvoice.customer_id)
+    .single()
+  const customerRates = customerRatesRaw as unknown as CustomerRateRow | null
+  const customerYellowRate = numberOrNull(customerRates?.yellow_rate_per_gross)
+  const customerWhiteRate = numberOrNull(customerRates?.white_rate_per_gross)
+  const yellowPlaceholderResolved =
+    oldYellowRate === 0 &&
+    customerYellowRate !== null &&
+    yellowRate === customerYellowRate
+  const whitePlaceholderResolved =
+    oldWhiteRate === 0 &&
+    customerWhiteRate !== null &&
+    whiteRate === customerWhiteRate
   const auditEvents: Array<{
     sales_invoice_id: string
     event_type: 'rate_change' | 'charge_edit'
@@ -265,7 +286,7 @@ export async function updateDraftInvoiceAction(
     actor_id: string | null
   }> = []
 
-  if (oldYellowRate !== yellowRate) {
+  if (oldYellowRate !== yellowRate && !yellowPlaceholderResolved) {
     auditEvents.push({
       sales_invoice_id: invoiceId,
       event_type: 'rate_change',
@@ -276,7 +297,7 @@ export async function updateDraftInvoiceAction(
       actor_id: actor,
     })
   }
-  if (oldWhiteRate !== whiteRate) {
+  if (oldWhiteRate !== whiteRate && !whitePlaceholderResolved) {
     auditEvents.push({
       sales_invoice_id: invoiceId,
       event_type: 'rate_change',

@@ -42,9 +42,17 @@ export function EditDraftInvoiceForm({ invoice, customerYellowRate, customerWhit
 
   const currentYellow = invoice.yellow_rate_per_gross !== null ? Number(invoice.yellow_rate_per_gross) : null
   const currentWhite = invoice.white_rate_per_gross !== null ? Number(invoice.white_rate_per_gross) : null
+  const defaultYellow =
+    (currentYellow === null || currentYellow === 0) && customerYellowRate !== null
+      ? customerYellowRate
+      : currentYellow
+  const defaultWhite =
+    (currentWhite === null || currentWhite === 0) && customerWhiteRate !== null
+      ? customerWhiteRate
+      : currentWhite
 
-  const [yellowInput, setYellowInput] = useState(String(currentYellow ?? ''))
-  const [whiteInput, setWhiteInput] = useState(String(currentWhite ?? ''))
+  const [yellowInput, setYellowInput] = useState(String(defaultYellow ?? ''))
+  const [whiteInput, setWhiteInput] = useState(String(defaultWhite ?? ''))
 
   const yellowDiffersFromMaster =
     customerYellowRate !== null &&
