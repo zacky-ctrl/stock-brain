@@ -13,7 +13,14 @@ export default async function LabourJobsPage() {
     .select(`
       id, date_assigned, expected_return_date, actual_return_date, status, notes, created_at, labour_unit_id,
       labour_units(name, serial_number),
-      labour_job_lines(quantity_sent_gross, quantity_returned_gross)
+      labour_job_lines(
+        id, quantity_sent_gross, quantity_returned_gross,
+        shape_designs(code, name),
+        bindi_colours(code),
+        sizes(code),
+        dabbi_colours(code),
+        brands(code, name)
+      )
     `)
     .order('date_assigned', { ascending: false })
     .limit(300)

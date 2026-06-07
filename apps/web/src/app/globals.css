@@ -1701,6 +1701,118 @@ a {
   }
 }
 
+/* ── Labour Portfolio Detail View ──────────────────────────── */
+
+.portfolio-detail-toggle {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.portfolio-detail-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.65rem;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  transition: background 0.12s, color 0.12s;
+}
+
+.portfolio-detail-toggle-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.portfolio-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 0.85rem;
+}
+
+.portfolio-detail-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.85rem;
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
+}
+
+.portfolio-detail-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.portfolio-detail-card-job-id {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--info);
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.portfolio-detail-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.portfolio-detail-sku-table-wrap {
+  overflow-x: auto;
+}
+
+.portfolio-detail-sku-mobile {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .portfolio-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .portfolio-detail-sku-table-wrap {
+    display: none;
+  }
+
+  .portfolio-detail-sku-mobile {
+    display: block;
+  }
+
+  .portfolio-detail-sku-row {
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: var(--text-xs);
+  }
+
+  .portfolio-detail-sku-row:last-child {
+    border-bottom: none;
+  }
+
+  .portfolio-detail-sku-row-label {
+    color: var(--text-secondary);
+    margin-bottom: 0.15rem;
+  }
+
+  .portfolio-detail-sku-row-nums {
+    display: flex;
+    gap: 0.75rem;
+    color: var(--text-primary);
+  }
+}
+
 /* ── Dispatch New Flow ──────────────────────────────────────── */
 
 .dispatch-new-form {

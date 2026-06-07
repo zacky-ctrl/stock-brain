@@ -9,6 +9,17 @@ import type { CSSProperties } from 'react'
 import { List, BarChart2 } from 'lucide-react'
 import { LabourPortfolioView } from './LabourPortfolioView'
 
+export type JobLineRow = {
+  id: string
+  quantity_sent_gross: string | number
+  quantity_returned_gross: string | number
+  shape_designs: { code: string; name: string | null } | { code: string; name: string | null }[] | null
+  bindi_colours: { code: string } | { code: string }[] | null
+  sizes: { code: string } | { code: string }[] | null
+  dabbi_colours: { code: string } | { code: string }[] | null
+  brands: { code: string; name: string | null } | { code: string; name: string | null }[] | null
+}
+
 export type JobRow = {
   id: string
   date_assigned: string
@@ -19,7 +30,7 @@ export type JobRow = {
   created_at: string
   labour_unit_id: string | null
   labour_units: { name: string; serial_number: number } | null
-  labour_job_lines: { quantity_sent_gross: string | number; quantity_returned_gross: string | number }[]
+  labour_job_lines: JobLineRow[]
 }
 
 function fmt(n: number): string {

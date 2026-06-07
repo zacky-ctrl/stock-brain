@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/Badge'
 import type { BadgeVariant } from '@/components/ui/Badge'
 import Link from 'next/link'
 import type { CSSProperties } from 'react'
-import type { JobRow } from './LabourJobsClient'
+import type { JobRow, JobLineRow } from './LabourJobsClient'
 
 // ── helpers ────────────────────────────────────────────────────
 
@@ -33,6 +33,12 @@ function dateLabel(date: string | null | undefined): string {
 
 function luFrom(job: JobRow) {
   return Array.isArray(job.labour_units) ? (job.labour_units as JobRow['labour_units'][])[0] : job.labour_units
+}
+
+function resolveRef<T>(raw: T | T[] | null | undefined): T | null {
+  if (!raw) return null
+  if (Array.isArray(raw)) return raw[0] ?? null
+  return raw
 }
 
 const TERMINAL = new Set(['returned_complete', 'cancelled_recalled'])
@@ -67,11 +73,9 @@ function perfBadge(level: PerfLevel): { variant: BadgeVariant; label: string } {
 // ── days taken colour ──────────────────────────────────────────
 
 function daysTakenStyle(job: JobRow): CSSProperties {
-  const today = todayIso()
   const isActive = !TERMINAL.has(job.status)
 
   if (isActive) {
-    // Show elapsed in info colour
     return { color: 'var(--info)' }
   }
 
@@ -159,7 +163,7 @@ const tdNum: CSSProperties = {
 // ── types ──────────────────────────────────────────────────────
 
 type UnitGroup = {
-  key: string               // serial_number as string, or 'unknown'
+  key: string
   name: string
   serial_number: number | null
   jobs: JobRow[]
@@ -171,10 +175,150 @@ type UnitGroup = {
   perf: PerfLevel
 }
 
+// ── SKU line display ───────────────────────────────────────────
+
+function skuLabels(line: JobLineRow) {
+  const shape = resolveRef(line.shape_designs)
+  const bindi = resolveRef(line.bindi_colours)
+  const size  = resolveRef(line.sizes)
+  const dabbi = resolveRef(line.dabbi_colours)
+  const brand = resolveRef(line.brands)
+  return {
+    shape: shape?.name ?? shape?.code ?? '—',
+    bindi: bindi?.code ?? '—',
+    size:  size?.code  ?? '—',
+    dabbi: dabbi?.code ?? '—',
+    brand: brand?.name ?? brand?.code ?? '—',
+  }
+}
+
+// ── Job detail card (shown in Detail mode) ─────────────────────
+
+const skuTh: CSSProperties = {
+  padding: '0.3rem 0.5rem',
+  fontSize: '0.68rem',
+  fontWeight: 700,
+  color: 'var(--text-secondary)',
+  textAlign: 'left',
+  borderBottom: '1px solid var(--border)',
+  background: 'var(--bg-elevated)',
+  whiteSpace: 'nowrap',
+}
+const skuThR: CSSProperties = { ...skuTh, textAlign: 'right' }
+const skuTd: CSSProperties = {
+  padding: '0.3rem 0.5rem',
+  fontSize: 'var(--text-xs)',
+  borderBottom: '1px solid var(--border-subtle)',
+  whiteSpace: 'nowrap',
+  verticalAlign: 'middle',
+}
+const skuTdR: CSSProperties = { ...skuTd, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
+
+function JobDetailCard({ job }: { job: JobRow }) {
+  const t = jobTotals(job)
+  const lines = job.labour_job_lines ?? []
+
+  return (
+    <div className="portfolio-detail-card">
+      {/* Card header */}
+      <div className="portfolio-detail-card-header">
+        <Link
+          href={`/operations/labour-jobs/${job.id}`}
+          className="portfolio-detail-card-job-id"
+        >
+          {job.id.slice(0, 8)}
+        </Link>
+        <Badge variant={jobStatusBadgeVariant(job)} label={jobStatusLabel(job)} size="sm" />
+      </div>
+
+      {/* Meta row */}
+      <div className="portfolio-detail-card-meta">
+        <span>Assigned: <strong>{dateLabel(job.date_assigned)}</strong></span>
+        <span>Exp. return: <strong>{dateLabel(job.expected_return_date)}</strong></span>
+        {job.actual_return_date && (
+          <span>Returned: <strong>{dateLabel(job.actual_return_date)}</strong></span>
+        )}
+        <span>Issued: <strong>{fmt(t.totalSent)}</strong></span>
+        <span>Returned: <strong>{fmt(t.totalReturned)}</strong></span>
+        <span>WIP: <strong style={{ color: t.variance > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>{fmt(t.variance)}</strong></span>
+      </div>
+
+      {/* SKU table — desktop/tablet */}
+      {lines.length === 0 ? (
+        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', padding: '0.5rem 0' }}>
+          No SKU lines
+        </div>
+      ) : (
+        <>
+          <div className="portfolio-detail-sku-table-wrap">
+            <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+              <thead>
+                <tr>
+                  <th style={skuTh}>Shape</th>
+                  <th style={skuTh}>Colour</th>
+                  <th style={skuTh}>Size</th>
+                  <th style={skuTh}>Dabbi</th>
+                  <th style={skuTh}>Brand</th>
+                  <th style={skuThR}>Sent</th>
+                  <th style={skuThR}>Returned</th>
+                  <th style={skuThR}>WIP</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((line) => {
+                  const lbl  = skuLabels(line)
+                  const sent = Number(line.quantity_sent_gross)
+                  const ret  = Number(line.quantity_returned_gross)
+                  const wip  = Math.max(0, sent - ret)
+                  return (
+                    <tr key={line.id}>
+                      <td style={skuTd}>{lbl.shape}</td>
+                      <td style={skuTd}>{lbl.bindi}</td>
+                      <td style={skuTd}>{lbl.size}</td>
+                      <td style={skuTd}>{lbl.dabbi}</td>
+                      <td style={skuTd}>{lbl.brand}</td>
+                      <td style={skuTdR}>{fmt(sent)}</td>
+                      <td style={{ ...skuTdR, color: 'var(--text-secondary)' }}>{fmt(ret)}</td>
+                      <td style={{ ...skuTdR, fontWeight: wip > 0 ? 700 : undefined }}>{fmt(wip)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* SKU rows — mobile only */}
+          <div className="portfolio-detail-sku-mobile">
+            {lines.map((line) => {
+              const lbl  = skuLabels(line)
+              const sent = Number(line.quantity_sent_gross)
+              const ret  = Number(line.quantity_returned_gross)
+              const wip  = Math.max(0, sent - ret)
+              return (
+                <div key={line.id} className="portfolio-detail-sku-row">
+                  <div className="portfolio-detail-sku-row-label">
+                    {lbl.shape} · {lbl.size} · {lbl.bindi} · {lbl.dabbi} · {lbl.brand}
+                  </div>
+                  <div className="portfolio-detail-sku-row-nums">
+                    <span>Sent <strong>{fmt(sent)}</strong></span>
+                    <span>Ret <strong>{fmt(ret)}</strong></span>
+                    <span>WIP <strong style={{ color: wip > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>{fmt(wip)}</strong></span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── main component ─────────────────────────────────────────────
 
 export function LabourPortfolioView({ jobs }: { jobs: JobRow[] }) {
   const [expandedUnits, setExpandedUnits] = useState<Set<string>>(new Set())
+  const [unitDetailMode, setUnitDetailMode] = useState<Map<string, 'summary' | 'detail'>>(new Map())
 
   const groups = useMemo<UnitGroup[]>(() => {
     const map = new Map<string, JobRow[]>()
@@ -235,6 +379,18 @@ export function LabourPortfolioView({ jobs }: { jobs: JobRow[] }) {
     })
   }
 
+  function getMode(key: string): 'summary' | 'detail' {
+    return unitDetailMode.get(key) ?? 'summary'
+  }
+
+  function setMode(key: string, mode: 'summary' | 'detail') {
+    setUnitDetailMode((prev) => {
+      const next = new Map(prev)
+      next.set(key, mode)
+      return next
+    })
+  }
+
   if (groups.length === 0) {
     return (
       <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
@@ -242,6 +398,8 @@ export function LabourPortfolioView({ jobs }: { jobs: JobRow[] }) {
       </div>
     )
   }
+
+  const COL_SPAN = 9
 
   return (
     <div style={{ overflowX: 'auto' }}>
@@ -262,6 +420,7 @@ export function LabourPortfolioView({ jobs }: { jobs: JobRow[] }) {
         <tbody>
           {groups.map((group) => {
             const isExpanded = expandedUnits.has(group.key)
+            const mode = getMode(group.key)
             const badge = perfBadge(group.perf)
 
             return (
@@ -298,8 +457,38 @@ export function LabourPortfolioView({ jobs }: { jobs: JobRow[] }) {
                   </td>
                 </tr>
 
-                {/* Job rows */}
-                {isExpanded && group.jobs.map((job) => {
+                {/* Summary / Detail toggle — shown when expanded */}
+                {isExpanded && (
+                  <tr key={`${group.key}-toggle`} style={{ background: 'var(--bg-elevated)' }}>
+                    <td
+                      colSpan={COL_SPAN}
+                      style={{
+                        padding: '0.35rem 0.75rem 0.35rem 2.5rem',
+                        borderBottom: '1px solid var(--border-subtle)',
+                      }}
+                    >
+                      <div className="portfolio-detail-toggle">
+                        <button
+                          type="button"
+                          className={`portfolio-detail-toggle-btn${mode === 'summary' ? ' active' : ''}`}
+                          onClick={(e) => { e.stopPropagation(); setMode(group.key, 'summary') }}
+                        >
+                          Summary
+                        </button>
+                        <button
+                          type="button"
+                          className={`portfolio-detail-toggle-btn${mode === 'detail' ? ' active' : ''}`}
+                          onClick={(e) => { e.stopPropagation(); setMode(group.key, 'detail') }}
+                        >
+                          Detail
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+
+                {/* Summary rows — current job-level table rows */}
+                {isExpanded && mode === 'summary' && group.jobs.map((job) => {
                   const t = jobTotals(job)
                   return (
                     <tr key={job.id} style={{ background: 'var(--bg-base)' }}>
@@ -332,6 +521,19 @@ export function LabourPortfolioView({ jobs }: { jobs: JobRow[] }) {
                     </tr>
                   )
                 })}
+
+                {/* Detail section — full-width card grid */}
+                {isExpanded && mode === 'detail' && (
+                  <tr key={`${group.key}-detail`}>
+                    <td colSpan={COL_SPAN} style={{ padding: '1rem 0.75rem', background: 'var(--bg-base)', borderBottom: '1px solid var(--border)' }}>
+                      <div className="portfolio-detail-grid">
+                        {group.jobs.map((job) => (
+                          <JobDetailCard key={job.id} job={job} />
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                )}
               </>
             )
           })}
