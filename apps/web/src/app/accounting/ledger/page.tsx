@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { selectStyle, tableTd, tableTh } from '@/lib/ui'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { AccountingTabs } from '../AccountingTabs'
+import { LedgerRowActions } from './LedgerRowActions'
 
 type SearchParams = {
   customer?: string
@@ -253,9 +254,7 @@ export default async function CustomerLedgerPage({
                       <td style={{ ...tableTd, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(summary.creditTotal)}</td>
                       <td style={{ ...tableTd, textAlign: 'right', fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>{balanceLabel(summary.balance)}</td>
                       <td style={tableTd}>
-                        <Link href={`/accounting/ledger?customer=${summary.customerId}`}>
-                          <Button type="button" size="sm" variant="secondary">Open</Button>
-                        </Link>
+                        <LedgerRowActions customerId={summary.customerId} />
                       </td>
                     </tr>
                   )

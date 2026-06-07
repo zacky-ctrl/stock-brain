@@ -29,6 +29,7 @@ type Props = {
   customers: CustomerOption[]
   invoices: InvoiceOption[]
   defaultReceiptDate: string
+  initialCustomerId?: string
 }
 
 const fieldStyle = {
@@ -57,8 +58,8 @@ function balanceLabel(value: number): string {
   return '0.00 clear'
 }
 
-export function ReceiptForm({ customers, invoices, defaultReceiptDate }: Props) {
-  const [selectedCustomerId, setSelectedCustomerId] = useState('')
+export function ReceiptForm({ customers, invoices, defaultReceiptDate, initialCustomerId }: Props) {
+  const [selectedCustomerId, setSelectedCustomerId] = useState(() => initialCustomerId ?? '')
   const [receiptAmount, setReceiptAmount] = useState('')
   const [state, formAction, isPending] = useActionState<ActionState, FormData>(
     postCustomerReceiptAction,

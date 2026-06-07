@@ -58,6 +58,10 @@ type ReceiptAllocationRow = {
   customer_receipts: { status: string } | { status: string }[] | null
 }
 
+type SearchParams = {
+  customer?: string
+}
+
 function money(value: number | string): string {
   return Number(value).toLocaleString('en-IN', {
     minimumFractionDigits: 2,
@@ -85,7 +89,12 @@ function statusVariant(status: string): 'success' | 'warning' | 'neutral' | 'dan
   return 'neutral'
 }
 
-export default async function ReceiptsPage() {
+export default async function ReceiptsPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>
+}) {
+  const { customer: requestedCustomerId } = await searchParams
   const supabase = createServerSupabaseClient()
 
   const [
@@ -191,6 +200,9 @@ export default async function ReceiptsPage() {
     ledgerBalance: ledgerBalanceByCustomer.get(customer.id) ?? 0,
     invoiceOutstanding: calculateCustomerOutstandingFromInvoices(invoiceReceivables, customer.id),
   }))
+  const initialCustomerId = customerOptions.some((customer) => customer.id === requestedCustomerId)
+    ? requestedCustomerId
+    : undefined
   const confirmedReceipts = receipts.filter((receipt) => receipt.status === 'confirmed')
   const cashTotal = confirmedReceipts
     .filter((receipt) => receipt.mode === 'cash')
@@ -242,6 +254,7 @@ export default async function ReceiptsPage() {
           customers={customerOptions}
           invoices={invoiceReceivables}
           defaultReceiptDate={todayInIndia()}
+          initialCustomerId={initialCustomerId}
         />
       </Card>
 
