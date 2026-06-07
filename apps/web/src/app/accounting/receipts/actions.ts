@@ -38,7 +38,7 @@ export async function postCustomerReceiptAction(
     return { error: 'Receipt mode is invalid' }
   }
 
-  const allocations: ReceiptAllocationInput[] = []
+  const allocationByInvoice = new Map<string, number>()
   for (const rawInvoiceId of invoiceIds) {
     const invoiceId = String(rawInvoiceId)
     const allocationAmountInput = formString(formData, `allocation_amount_${invoiceId}`)
@@ -49,15 +49,16 @@ export async function postCustomerReceiptAction(
       return { error: 'One of the invoice allocation amounts is invalid' }
     }
     if (allocationAmount > 0) {
-      allocations.push({
-        invoice_id: invoiceId,
-        amount: allocationAmount,
-      })
+      allocationByInvoice.set(invoiceId, (allocationByInvoice.get(invoiceId) ?? 0) + allocationAmount)
     }
   }
 
+  const allocations: ReceiptAllocationInput[] = [...allocationByInvoice.entries()].map(([invoiceId, allocationAmount]) => ({
+    invoice_id: invoiceId,
+    amount: Math.round(allocationAmount * 100) / 100,
+  }))
   const allocatedTotal = allocations.reduce((total, allocation) => total + allocation.amount, 0)
-  if (allocatedTotal > amount) {
+  if (Math.round(allocatedTotal * 100) / 100 > Math.round(amount * 100) / 100) {
     return { error: 'Invoice allocation cannot be more than receipt amount' }
   }
 

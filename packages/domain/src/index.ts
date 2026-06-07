@@ -127,10 +127,14 @@ export {
 } from './accounting/ledger'
 
 export {
+  calculateAutoReceiptAllocations,
   calculateCustomerOutstandingFromInvoices,
   calculateInvoiceReceivables,
+  calculateReceiptAllocationPlan,
   type InvoiceReceivable,
   type InvoiceReceivableInput,
+  type ReceiptAllocationInput,
+  type ReceiptAllocationPlan,
 } from './accounting/receipts'
 
 export {
