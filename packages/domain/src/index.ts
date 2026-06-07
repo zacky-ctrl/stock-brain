@@ -131,6 +131,8 @@ export {
   calculateCustomerOutstandingFromInvoices,
   calculateInvoiceReceivables,
   calculateReceiptAllocationPlan,
+  resolveInvoicePaymentStatus,
+  type InvoicePaymentStatus,
   type InvoiceReceivable,
   type InvoiceReceivableInput,
   type ReceiptAllocationInput,

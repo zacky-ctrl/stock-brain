@@ -26,6 +26,8 @@ export type ReceiptAllocationPlan = {
   allocations: ReceiptAllocationInput[]
 }
 
+export type InvoicePaymentStatus = 'unpaid' | 'partial' | 'paid' | 'overpaid'
+
 function money(value: number): number {
   return Math.round(value * 100) / 100
 }
@@ -104,4 +106,18 @@ export function calculateAutoReceiptAllocations<T extends InvoiceReceivable>(
   }
 
   return allocationByInvoice
+}
+
+export function resolveInvoicePaymentStatus(
+  totalAmount: number,
+  allocatedAmount: number,
+): InvoicePaymentStatus {
+  const total = money(totalAmount)
+  const allocated = money(allocatedAmount)
+
+  if (total <= 0) return allocated > 0 ? 'overpaid' : 'unpaid'
+  if (allocated <= 0) return 'unpaid'
+  if (allocated > total) return 'overpaid'
+  if (allocated === total) return 'paid'
+  return 'partial'
 }

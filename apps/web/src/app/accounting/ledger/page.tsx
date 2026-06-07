@@ -1,5 +1,10 @@
 import Link from 'next/link'
-import { calculateCustomerLedgerSummaries, calculateCustomerRunningLedger } from '@stock-brain/domain'
+import {
+  calculateCustomerLedgerSummaries,
+  calculateCustomerRunningLedger,
+  resolveInvoicePaymentStatus,
+  type InvoicePaymentStatus,
+} from '@stock-brain/domain'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -39,6 +44,32 @@ type InvoiceRefRow = {
   invoice_number: string | null
 }
 
+type CustomerInvoiceRow = {
+  id: string
+  invoice_number: string | null
+  invoice_date: string
+  due_date: string | null
+  total_amount: number | string
+  status: string
+}
+
+type InvoiceAllocationRow = {
+  sales_invoice_id: string
+  customer_receipt_id: string
+  amount_allocated: number | string
+  customer_receipts: { status: string } | { status: string }[] | null
+}
+
+type CustomerReceiptRow = {
+  id: string
+  receipt_number: string | null
+  receipt_date: string
+  amount: number | string
+  mode: string
+  reference: string | null
+  status: string
+}
+
 function money(value: number | string): string {
   return Number(value).toLocaleString('en-IN', {
     minimumFractionDigits: 2,
@@ -66,6 +97,13 @@ function balanceLabel(balance: number): string {
   if (balance > 0) return `${money(balance)} receivable`
   if (balance < 0) return `${money(Math.abs(balance))} advance`
   return '0.00 clear'
+}
+
+function paymentStatusVariant(status: InvoicePaymentStatus): 'success' | 'warning' | 'neutral' | 'danger' {
+  if (status === 'paid') return 'success'
+  if (status === 'partial') return 'warning'
+  if (status === 'overpaid') return 'danger'
+  return 'neutral'
 }
 
 export default async function CustomerLedgerPage({
@@ -138,6 +176,66 @@ export default async function CustomerLedgerPage({
         .select('id, invoice_number')
         .in('id', invoiceSourceIds)
     : { data: [] }
+
+  const [{ data: selectedInvoicesRaw }, { data: selectedReceiptsRaw }] = selectedCustomerId
+    ? await Promise.all([
+        supabase
+          .from('sales_invoices')
+          .select('id, invoice_number, invoice_date, due_date, total_amount, status')
+          .eq('customer_id', selectedCustomerId)
+          .eq('status', 'issued')
+          .order('invoice_date', { ascending: false })
+          .limit(100),
+        supabase
+          .from('customer_receipts')
+          .select('id, receipt_number, receipt_date, amount, mode, reference, status')
+          .eq('customer_id', selectedCustomerId)
+          .order('receipt_date', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(100),
+      ])
+    : [{ data: [] }, { data: [] }]
+
+  const selectedInvoices = (selectedInvoicesRaw ?? []) as unknown as CustomerInvoiceRow[]
+  const selectedReceipts = (selectedReceiptsRaw ?? []) as unknown as CustomerReceiptRow[]
+  const selectedInvoiceIds = selectedInvoices.map((invoice) => invoice.id)
+  const selectedReceiptIds = selectedReceipts.map((receipt) => receipt.id)
+  const { data: selectedAllocationsRaw } =
+    selectedInvoiceIds.length > 0 || selectedReceiptIds.length > 0
+      ? await supabase
+          .from('sales_invoice_receipt_allocations')
+          .select(`
+            sales_invoice_id,
+            customer_receipt_id,
+            amount_allocated,
+            customer_receipts (
+              status
+            )
+          `)
+          .or([
+            selectedInvoiceIds.length > 0 ? `sales_invoice_id.in.(${selectedInvoiceIds.join(',')})` : '',
+            selectedReceiptIds.length > 0 ? `customer_receipt_id.in.(${selectedReceiptIds.join(',')})` : '',
+          ].filter(Boolean).join(','))
+      : { data: [] }
+
+  const selectedAllocations = (selectedAllocationsRaw ?? []) as unknown as InvoiceAllocationRow[]
+  const allocatedByInvoice = new Map<string, number>()
+  const allocatedByReceipt = new Map<string, number>()
+
+  for (const allocation of selectedAllocations) {
+    const receipt = resolveRef(allocation.customer_receipts)
+    if (receipt?.status !== 'confirmed') continue
+
+    const amount = Number(allocation.amount_allocated)
+    allocatedByInvoice.set(
+      allocation.sales_invoice_id,
+      (allocatedByInvoice.get(allocation.sales_invoice_id) ?? 0) + amount,
+    )
+    allocatedByReceipt.set(
+      allocation.customer_receipt_id,
+      (allocatedByReceipt.get(allocation.customer_receipt_id) ?? 0) + amount,
+    )
+  }
 
   const invoiceRefs = new Map(
     ((invoiceRefsRaw ?? []) as unknown as InvoiceRefRow[]).map((invoice) => [invoice.id, invoice.invoice_number]),
@@ -280,6 +378,109 @@ export default async function CustomerLedgerPage({
             </div>
           </div>
         </Card>
+      )}
+
+      {selectedCustomerId && (
+        <section
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1.2fr) minmax(320px, 0.8fr)',
+            gap: '1rem',
+            marginBottom: '1rem',
+          }}
+        >
+          <Card>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <h2 style={{ margin: 0, fontSize: 'var(--text-lg)' }}>Invoice Settlement</h2>
+              <Link href={`/accounting/receipts?customer=${selectedCustomerId}`}>
+                <Button type="button" size="sm" variant="primary">Receive Payment</Button>
+              </Link>
+            </div>
+            <div className="desktop-table-card" style={{ overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '760px' }}>
+                <thead>
+                  <tr>
+                    <th style={tableTh}>Invoice</th>
+                    <th style={tableTh}>Date</th>
+                    <th style={tableTh}>Due</th>
+                    <th style={tableTh}>Status</th>
+                    <th style={{ ...tableTh, textAlign: 'right' }}>Total</th>
+                    <th style={{ ...tableTh, textAlign: 'right' }}>Received</th>
+                    <th style={{ ...tableTh, textAlign: 'right' }}>Outstanding</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedInvoices.map((invoice) => {
+                    const allocatedAmount = allocatedByInvoice.get(invoice.id) ?? 0
+                    const outstandingAmount = Math.max(0, Number(invoice.total_amount) - allocatedAmount)
+                    const paymentStatus = resolveInvoicePaymentStatus(Number(invoice.total_amount), allocatedAmount)
+                    return (
+                      <tr key={invoice.id}>
+                        <td style={tableTd}>
+                          <Link href={`/accounting/invoices/${invoice.id}`} style={{ color: 'var(--accent-bright)', fontWeight: 900 }}>
+                            {invoice.invoice_number ?? invoice.id.slice(0, 8)}
+                          </Link>
+                        </td>
+                        <td style={tableTd}>{invoice.invoice_date}</td>
+                        <td style={tableTd}>{invoice.due_date ?? '-'}</td>
+                        <td style={tableTd}>
+                          <Badge variant={paymentStatusVariant(paymentStatus)} label={paymentStatus} size="sm" />
+                        </td>
+                        <td style={{ ...tableTd, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(invoice.total_amount)}</td>
+                        <td style={{ ...tableTd, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(allocatedAmount)}</td>
+                        <td style={{ ...tableTd, textAlign: 'right', fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>{money(outstandingAmount)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {selectedInvoices.length === 0 && (
+              <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
+                No issued invoices for this customer yet.
+              </p>
+            )}
+          </Card>
+
+          <Card>
+            <h2 style={{ margin: '0 0 0.75rem', fontSize: 'var(--text-lg)' }}>Recent Receipts</h2>
+            <div style={{ display: 'grid', gap: '0.65rem' }}>
+              {selectedReceipts.slice(0, 8).map((receipt) => {
+                const allocatedAmount = allocatedByReceipt.get(receipt.id) ?? 0
+                const advanceAmount = Math.max(0, Number(receipt.amount) - allocatedAmount)
+                return (
+                  <div
+                    key={receipt.id}
+                    style={{
+                      display: 'grid',
+                      gap: '0.35rem',
+                      padding: '0.65rem 0',
+                      borderBottom: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                      <strong>{receipt.receipt_number ?? receipt.id.slice(0, 8)}</strong>
+                      <Badge variant={receipt.status === 'confirmed' ? 'success' : 'danger'} label={receipt.status} size="sm" />
+                    </div>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-xs)', fontWeight: 700 }}>
+                      {receipt.receipt_date} · {receipt.mode.toUpperCase()}{receipt.reference ? ` · ${receipt.reference}` : ''}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.5rem', fontSize: 'var(--text-sm)' }}>
+                      <span>Total <strong>{money(receipt.amount)}</strong></span>
+                      <span>Linked <strong>{money(allocatedAmount)}</strong></span>
+                      <span>Advance <strong>{money(advanceAmount)}</strong></span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {selectedReceipts.length === 0 && (
+              <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
+                No receipts posted for this customer yet.
+              </p>
+            )}
+          </Card>
+        </section>
       )}
 
       <Card>
