@@ -27,15 +27,21 @@ export async function saveVelvetRatesMatrixAction(data: {
       .select('id, gross_per_metre, metres_per_bundle, buffer_gross')
       .eq('shape_design_id', row.shape_design_id)
       .eq('size_id', row.size_id)
-      .eq('is_active', true)
       .maybeSingle()
 
     if (existing) {
-      const { error: deactErr } = await supabase
+      const { error: updateErr } = await supabase
         .from('velvet_conversion_rates')
-        .update({ is_active: false })
+        .update({
+          gross_per_metre: row.gross_per_metre,
+          metres_per_bundle: row.metres_per_bundle,
+          buffer_gross: row.buffer_gross,
+          is_active: true,
+          notes: `Matrix update: g/m ${Number(existing.gross_per_metre).toFixed(3)}→${row.gross_per_metre.toFixed(3)}, m/b ${Number(existing.metres_per_bundle).toFixed(3)}→${row.metres_per_bundle.toFixed(3)}, buf ${Number(existing.buffer_gross ?? 0).toFixed(3)}→${row.buffer_gross.toFixed(3)}. ${data.reason}`,
+        })
         .eq('id', existing.id)
-      if (deactErr) return `Deactivate failed: ${deactErr.message}`
+
+      return updateErr ? `Update failed: ${updateErr.message}` : null
     }
 
     const { error: insertErr } = await supabase
@@ -47,19 +53,10 @@ export async function saveVelvetRatesMatrixAction(data: {
         metres_per_bundle: row.metres_per_bundle,
         buffer_gross: row.buffer_gross,
         is_active: true,
-        notes: existing
-          ? `Matrix update: g/m ${Number(existing.gross_per_metre).toFixed(3)}→${row.gross_per_metre.toFixed(3)}, buf ${existing.buffer_gross}→${row.buffer_gross}. ${data.reason}`
-          : `Added via matrix. ${data.reason}`,
+        notes: `Added via matrix. ${data.reason}`,
       })
 
-    if (insertErr) {
-      if (existing) {
-        await supabase.from('velvet_conversion_rates').update({ is_active: true }).eq('id', existing.id)
-      }
-      return `Insert failed: ${insertErr.message}`
-    }
-
-    return null
+    return insertErr ? `Insert failed: ${insertErr.message}` : null
   }))
 
   const errors = results.filter((r): r is string => r !== null)
@@ -111,37 +108,23 @@ export async function updateVelvetRate(
     return { error: 'No changes — gross_per_metre, metres_per_bundle, and notes are unchanged' }
   }
 
-  // Deactivate the old rate
-  const { error: deactErr } = await supabase
+  const { error: updateErr } = await supabase
     .from('velvet_conversion_rates')
-    .update({ is_active: false })
-    .eq('id', rateId)
-
-  if (deactErr) return { error: `Failed to deactivate old rate: ${deactErr.message}` }
-
-  // Insert new rate as the active version
-  const { error: insertErr } = await supabase
-    .from('velvet_conversion_rates')
-    .insert({
-      shape_design_id: current.shape_design_id,
-      size_id: current.size_id,
+    .update({
       gross_per_metre: newGross,
       metres_per_bundle: newMetresPerBundle,
       is_active: true,
       notes: notes ? `${notes} [Updated from ${Number(current.gross_per_metre as number | string).toFixed(3)}: ${reason}]` : `Updated from ${Number(current.gross_per_metre as number | string).toFixed(3)}: ${reason}`,
     })
+    .eq('id', rateId)
 
-  if (insertErr) {
-    // Rollback deactivation attempt
-    await supabase.from('velvet_conversion_rates').update({ is_active: true }).eq('id', rateId)
-    return { error: `Failed to insert new rate: ${insertErr.message}. Old rate reactivated.` }
-  }
+  if (updateErr) return { error: `Failed to update rate: ${updateErr.message}` }
 
   revalidatePath('/masters/velvet-rates')
   revalidatePath('/planning/allocation')
   revalidatePath('/planning/cutting-required')
 
-  return { success: `Rate updated: ${Number(current.gross_per_metre).toFixed(3)} → ${newGross.toFixed(3)} gross/metre. Old rate deactivated (preserved in history).` }
+  return { success: `Rate updated: ${Number(current.gross_per_metre).toFixed(3)} → ${newGross.toFixed(3)} gross/metre.` }
 }
 
 export async function addVelvetRate(
