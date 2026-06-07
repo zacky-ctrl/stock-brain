@@ -327,12 +327,34 @@ function OrderCard({
   return (
     <article className="order-card">
       <div className="order-card-top">
-        <div style={{ minWidth: 0 }}>
+        <div className="order-row-primary">
           <Link href={`/orders/${order.id}`} className="mobile-card-title">
             {order.customer_name}
           </Link>
           <div className="mobile-card-meta">
             {order.order_date} {order.reference ? ` / ${order.reference}` : ''}
+          </div>
+        </div>
+        <div className="order-row-metrics" aria-label="Order summary">
+          <div>
+            <span>Lines</span>
+            <strong>{order.line_count}</strong>
+          </div>
+          <div>
+            <span>Ordered</span>
+            <strong>{fmt(order.total_ordered)}</strong>
+          </div>
+          <div>
+            <span>Dispatched</span>
+            <strong>{fmt(order.total_dispatched)}</strong>
+          </div>
+          <div>
+            <span>Open</span>
+            <strong style={{ color: order.is_stale ? 'var(--danger)' : undefined }}>{fmt(order.open_qty)}</strong>
+          </div>
+          <div className="order-row-shortage">
+            <span>Summary</span>
+            <ShortageChips order={order} expanded={expanded} onToggle={onToggleShortage} />
           </div>
         </div>
         <div className="order-card-head-actions">
@@ -394,18 +416,6 @@ function OrderCard({
             )}
           </div>
         </div>
-      </div>
-
-      <div className="mobile-card-grid">
-        <div><span className="mobile-card-label">Lines</span><strong className="mobile-card-value">{order.line_count}</strong></div>
-        <div><span className="mobile-card-label">Ordered</span><strong className="mobile-card-value">{fmt(order.total_ordered)}</strong></div>
-        <div><span className="mobile-card-label">Dispatched</span><strong className="mobile-card-value">{fmt(order.total_dispatched)}</strong></div>
-        <div><span className="mobile-card-label">Open</span><strong className="mobile-card-value" style={{ color: order.is_stale ? 'var(--danger)' : undefined }}>{fmt(order.open_qty)}</strong></div>
-      </div>
-
-      <div className="mobile-card-row" style={{ marginTop: '0.65rem' }}>
-        <span className="mobile-card-label">Shortage</span>
-        <ShortageChips order={order} expanded={expanded} onToggle={onToggleShortage} />
       </div>
 
       <div className="order-card-progress" aria-label={`${Math.round(order.dispatch_pct * 100)} percent dispatched`}>
