@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState, useCallback, useRef, useMemo } from 'react'
+import { useActionState, useState, useCallback, useMemo, useEffect } from 'react'
 import { createLabourJob } from './actions'
 import type { ActionState } from '@/lib/masters'
 import { fieldWrap, inputStyle, selectStyle, btnPrimary, msgError } from '@/lib/ui'
@@ -34,6 +34,22 @@ type LineState = {
   brand_id: string
   quantity_sent_gross: string
 }
+
+type LabourJobDraft = {
+  labourUnitId: string
+  dateAssigned: string
+  expectedReturnDate: string
+  notes: string
+  view: 'list' | 'matrix'
+  matrixDabbiId: string
+  matrixBrandId: string
+  lines: LineState[]
+  timestamp: number
+}
+
+const MATRIX_DRAFT_KEY = 'labour-job-new'
+const FORM_DRAFT_KEY = 'labour-job-new-details'
+const DRAFT_TTL_MS = 86_400_000
 
 const emptyLine = (): LineState => ({
   shape_design_id: '',
@@ -88,8 +104,8 @@ export function CreateLabourJobForm({
   const [matrixDabbiId, setMatrixDabbiId] = useState<string>('')
   const [matrixBrandId, setMatrixBrandId] = useState<string>('')
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({})
-
-  const matrixChanges = useRef<MatrixChangeEvent[]>([])
+  const [matrixChanges, setMatrixChanges] = useState<MatrixChangeEvent[]>([])
+  const [draftHydrated, setDraftHydrated] = useState(false)
 
   const addLine = () => setLines((prev) => [...prev, emptyLine()])
   const removeLine = (i: number) => setLines((prev) => prev.filter((_, idx) => idx !== i))
@@ -97,14 +113,96 @@ export function CreateLabourJobForm({
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)))
 
   const handleMatrixCellChange = useCallback((change: MatrixChangeEvent) => {
-    const idx = matrixChanges.current.findIndex(
-      (c) => c.design_id === change.design_id && c.colour_id === change.colour_id && c.size_id === change.size_id,
-    )
-    if (idx >= 0) {
-      matrixChanges.current[idx] = change
-    } else {
-      matrixChanges.current.push(change)
+    setMatrixChanges((prev) => {
+      const idx = prev.findIndex(
+        (c) => c.design_id === change.design_id && c.colour_id === change.colour_id && c.size_id === change.size_id,
+      )
+      if (idx >= 0) {
+        const next = [...prev]
+        next[idx] = change
+        return next
+      }
+      return [...prev, change]
+    })
+  }, [])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(FORM_DRAFT_KEY)
+      if (!raw) {
+        setDraftHydrated(true)
+        return
+      }
+      const parsed = JSON.parse(raw) as Partial<LabourJobDraft>
+      if (typeof parsed.timestamp === 'number' && Date.now() - parsed.timestamp > DRAFT_TTL_MS) {
+        localStorage.removeItem(FORM_DRAFT_KEY)
+        setDraftHydrated(true)
+        return
+      }
+      if (typeof parsed.labourUnitId === 'string') setLabourUnitId(parsed.labourUnitId)
+      if (typeof parsed.dateAssigned === 'string' && parsed.dateAssigned) setDateAssigned(parsed.dateAssigned)
+      if (typeof parsed.expectedReturnDate === 'string') setExpectedReturnDate(parsed.expectedReturnDate)
+      if (typeof parsed.notes === 'string') setNotes(parsed.notes)
+      if (parsed.view === 'list' || parsed.view === 'matrix') setView(parsed.view)
+      if (typeof parsed.matrixDabbiId === 'string') setMatrixDabbiId(parsed.matrixDabbiId)
+      if (typeof parsed.matrixBrandId === 'string') setMatrixBrandId(parsed.matrixBrandId)
+      if (Array.isArray(parsed.lines) && parsed.lines.length > 0) setLines(parsed.lines)
+    } catch {
+      localStorage.removeItem(FORM_DRAFT_KEY)
+    } finally {
+      setDraftHydrated(true)
     }
+  }, [])
+
+  useEffect(() => {
+    if (!draftHydrated) return
+    const hasListLine = lines.some((line) =>
+      Boolean(
+        line.shape_design_id ||
+        line.bindi_colour_id ||
+        line.size_id ||
+        line.dabbi_colour_id ||
+        line.brand_id ||
+        line.quantity_sent_gross,
+      ),
+    )
+    const hasDetails = Boolean(labourUnitId || expectedReturnDate || notes || matrixDabbiId || matrixBrandId || hasListLine)
+    if (!hasDetails) return
+
+    const draft: LabourJobDraft = {
+      labourUnitId,
+      dateAssigned,
+      expectedReturnDate,
+      notes,
+      view,
+      matrixDabbiId,
+      matrixBrandId,
+      lines,
+      timestamp: Date.now(),
+    }
+    localStorage.setItem(FORM_DRAFT_KEY, JSON.stringify(draft))
+  }, [
+    dateAssigned,
+    draftHydrated,
+    expectedReturnDate,
+    labourUnitId,
+    lines,
+    matrixBrandId,
+    matrixDabbiId,
+    notes,
+    view,
+  ])
+
+  const discardFormDraft = useCallback(() => {
+    localStorage.removeItem(FORM_DRAFT_KEY)
+    setLabourUnitId('')
+    setDateAssigned(new Date().toISOString().split('T')[0])
+    setExpectedReturnDate('')
+    setNotes('')
+    setMatrixDabbiId('')
+    setMatrixBrandId('')
+    setLines([emptyLine()])
+    setMatrixChanges([])
   }, [])
 
   const canShowMatrix = sizeMaster.length > 0 && designMaster.length > 0 && colourMaster.length > 0
@@ -142,7 +240,7 @@ export function CreateLabourJobForm({
   const buildMatrixLinesPayload = () => {
     if (!matrixDabbiId || !matrixBrandId) return null
     const inserts = parseMatrixToOrderLines(
-      matrixChanges.current.filter((c) => c.quantity > 0),
+      matrixChanges.filter((c) => c.quantity > 0),
       matrixDabbiId,
     )
     return inserts.map((ins) => ({
@@ -291,8 +389,9 @@ export function CreateLabourJobForm({
                 data={emptyMatrixData!}
                 mode="edit"
                 onCellChange={handleMatrixCellChange}
-                draftKey="labour-job-new"
+                draftKey={MATRIX_DRAFT_KEY}
                 compactMobile
+                onDraftDiscard={discardFormDraft}
               />
             </div>
             {(!matrixDabbiId || !matrixBrandId) && (

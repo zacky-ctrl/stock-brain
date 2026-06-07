@@ -20,6 +20,7 @@ export type MatrixGridProps = {
   printTitle?: string
   draftKey?: string
   onSaveComplete?: () => void
+  onDraftDiscard?: () => void
 }
 
 // ── highlight colours (dark-theme tokens) ─────────────────────
@@ -88,6 +89,7 @@ export function MatrixGrid({
   printTitle,
   draftKey,
   onSaveComplete,
+  onDraftDiscard,
 }: MatrixGridProps) {
   const [focusedCell, setFocusedCell] = useState<string | null>(null)
   const [editState, setEditState] = useState<Record<string, Record<string, string>>>(() => {
@@ -226,8 +228,9 @@ export function MatrixGrid({
 
   const handleDiscardDraft = useCallback(() => {
     if (draftKey) localStorage.removeItem(`matrix-draft-${draftKey}`)
+    onDraftDiscard?.()
     setHasDraft(false)
-  }, [draftKey])
+  }, [draftKey, onDraftDiscard])
 
   // ── styles ────────────────────────────────────────────────
 
@@ -385,12 +388,12 @@ export function MatrixGrid({
           <span style={{ color: 'var(--text-secondary)' }}>
             Draft saved {draftAge}
           </span>
-          <button onClick={handleRestoreDraft}
+          <button type="button" onClick={handleRestoreDraft}
             style={{ color: 'var(--accent)', fontWeight: 600, background: 'none',
               border: 'none', cursor: 'pointer', fontSize: 'var(--text-sm)' }}>
             Restore
           </button>
-          <button onClick={handleDiscardDraft}
+          <button type="button" onClick={handleDiscardDraft}
             style={{ color: 'var(--text-muted)', background: 'none',
               border: 'none', cursor: 'pointer', fontSize: 'var(--text-sm)' }}>
             Discard
