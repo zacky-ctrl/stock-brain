@@ -186,38 +186,41 @@ export async function applyVelvetCorrection(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const newBundlesRaw = (formData.get('new_bundles') as string ?? '').trim()
+  const balanceId = (formData.get('balance_id') as string ?? '').trim()
+  const newMetresRaw = (formData.get('new_metres') as string ?? '').trim()
   const reason = (formData.get('reason') as string ?? '').trim()
   const notes = (formData.get('notes') as string ?? '').trim() || null
 
-  if (!newBundlesRaw) return { error: 'New bundles value is required' }
+  if (!balanceId) return { error: 'Velvet colour balance is required' }
+  if (!newMetresRaw) return { error: 'New metres value is required' }
   if (!reason) return { error: 'Reason is required' }
 
-  const newBundles = parseFloat(newBundlesRaw)
-  if (!Number.isFinite(newBundles) || newBundles < 0) return { error: 'New bundles must be a non-negative number' }
+  const newMetres = parseFloat(newMetresRaw)
+  if (!Number.isFinite(newMetres) || newMetres < 0) return { error: 'New metres must be a non-negative number' }
 
   const supabase = createServerSupabaseClient()
   const actor = await getActorId()
 
   const { data: balance, error: readErr } = await supabase
     .from('velvet_stock_balance')
-    .select('id, bundles_on_hand')
+    .select('id, bindi_colour_id, metres_on_hand, bindi_colours(code, name)')
     .eq('velvet_type', 'standard')
+    .eq('id', balanceId)
     .single()
 
   if (readErr || !balance) return { error: 'Velvet balance row not found' }
 
-  const oldBundles = Number(balance.bundles_on_hand)
-  if (oldBundles === newBundles) return { error: 'New value is the same — no correction needed' }
+  const oldMetres = Number(balance.metres_on_hand)
+  if (oldMetres === newMetres) return { error: 'New value is the same — no correction needed' }
 
   const { error: corrErr } = await supabase.from('stock_corrections').insert({
     corrected_by: actor,
     stock_stage: 'velvet',
     entity_table: 'velvet_stock_balance',
     entity_id: balance.id as string,
-    field_corrected: 'bundles_on_hand',
-    old_value: oldBundles,
-    new_value: newBundles,
+    field_corrected: 'metres_on_hand',
+    old_value: oldMetres,
+    new_value: newMetres,
     reason,
     notes,
   })
@@ -226,8 +229,8 @@ export async function applyVelvetCorrection(
 
   const { error: updateErr } = await supabase
     .from('velvet_stock_balance')
-    .update({ bundles_on_hand: newBundles, last_updated_at: new Date().toISOString() })
-    .eq('velvet_type', 'standard')
+    .update({ metres_on_hand: newMetres, last_updated_at: new Date().toISOString() })
+    .eq('id', balanceId)
 
   if (updateErr) {
     return { error: `Balance update failed: ${updateErr.message}. Correction record written — investigate.` }
@@ -237,9 +240,9 @@ export async function applyVelvetCorrection(
   revalidatePath('/operations/velvet-receipts/stock')
   revalidatePath('/admin/stock-correction')
 
-  const delta = newBundles - oldBundles
+  const delta = newMetres - oldMetres
   const sign = delta > 0 ? '+' : ''
-  return { success: `Velvet correction applied: ${oldBundles.toFixed(3)} → ${newBundles.toFixed(3)} bundles (${sign}${delta.toFixed(3)})` }
+  return { success: `Velvet correction applied: ${oldMetres.toFixed(3)} → ${newMetres.toFixed(3)} metres (${sign}${delta.toFixed(3)} m)` }
 }
 
 // ── WIP write-off ─────────────────────────────────────────────

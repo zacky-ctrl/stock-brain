@@ -11,6 +11,7 @@ import type { ActionState } from '@/lib/masters'
 import type { BulkCorrectionInput, BulkCorrectionResult } from './actions'
 import { fieldWrap, inputStyle, selectStyle, btnPrimary, msgError, msgOk } from '@/lib/ui'
 import type { CSSProperties } from 'react'
+import { METRES_PER_BUNDLE } from '@stock-brain/domain'
 
 // ── Exported types (used by page.tsx) ─────────────────────────
 
@@ -49,7 +50,11 @@ export type CuttingsBalanceOption = {
 }
 
 export type VelvetBalance = {
-  bundles_on_hand: number
+  id: string
+  bindi_colour_id: string | null
+  colour_label: string
+  metres_on_hand: number
+  last_updated_at: string
 }
 
 export type WipLineOption = {
@@ -73,7 +78,7 @@ export type CorrectionHistoryRow = {
 export type StockCorrectionFormProps = {
   readyBalances: BalanceOption[]
   cuttingsBalances: CuttingsBalanceOption[]
-  velvetBalance: VelvetBalance | null
+  velvetBalances: VelvetBalance[]
   wipLines: WipLineOption[]
   shapes: DimOption[]
   bindis: DimOption[]
@@ -849,28 +854,85 @@ function MultiLineCuttingsForm({
   )
 }
 
-// ── Velvet form (unchanged) ───────────────────────────────────
+// ── Velvet form ───────────────────────────────────────────────
 
-function VelvetForm({ balance }: { balance: VelvetBalance | null }) {
+function VelvetForm({ balances }: { balances: VelvetBalance[] }) {
   const [state, formAction, isPending] = useActionState<ActionState, FormData>(applyVelvetCorrection, null)
+  const [selectedBalanceId, setSelectedBalanceId] = useState('')
+  const [newMetres, setNewMetres] = useState('')
+  const selectedBalance = balances.find((balance) => balance.id === selectedBalanceId) ?? null
+  const parsedMetres = newMetres ? parseFloat(newMetres) : null
+  const deltaMetres = selectedBalance && parsedMetres !== null && Number.isFinite(parsedMetres)
+    ? parsedMetres - selectedBalance.metres_on_hand
+    : null
 
   return (
     <div>
       {state && 'error' in state && <p style={{ ...msgError, marginBottom: '1rem' }}>✗ {state.error}</p>}
       {state && 'success' in state && <p style={{ ...msgOk, marginBottom: '1rem' }}>✓ {state.success}</p>}
 
-      {balance !== null && (
-        <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-          Current velvet stock: <strong>{fmt(balance.bundles_on_hand)}</strong> bundles ({fmt(balance.bundles_on_hand * 25)} m)
+      {balances.length === 0 ? (
+        <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)' }}>
+          No velvet balance rows found. Use Velvet Receipt or Opening Stock first.
         </p>
-      )}
+      ) : null}
 
       <form action={formAction} style={{ maxWidth: '600px' }}>
         <div style={{ ...fieldWrap, marginBottom: '0.75rem' }}>
-          <label>New Bundles on Hand</label>
-          <input name="new_bundles" type="number" min="0" step="0.001" style={inputStyle} placeholder="Correct total (not a delta)" required />
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Enter the correct total bundles, not a change.</span>
+          <label>Velvet Colour Balance</label>
+          <select
+            name="balance_id"
+            value={selectedBalanceId}
+            onChange={(event) => setSelectedBalanceId(event.target.value)}
+            style={selectStyle}
+            required
+          >
+            <option value="">Select velvet colour…</option>
+            {balances.map((balance) => (
+              <option key={balance.id} value={balance.id}>
+                {balance.colour_label} — {fmt(balance.metres_on_hand)} m ({fmt(balance.metres_on_hand / METRES_PER_BUNDLE)} bundles)
+              </option>
+            ))}
+          </select>
         </div>
+
+        {selectedBalance && (
+          <div style={{ ...skuInfoBox, marginBottom: '0.75rem' }}>
+            <strong style={{ color: 'var(--text-primary)' }}>{selectedBalance.colour_label}</strong>
+            {'  '}
+            <span>Current: {fmt(selectedBalance.metres_on_hand)} m</span>
+            {' | '}
+            <span>{fmt(selectedBalance.metres_on_hand / METRES_PER_BUNDLE)} bundles</span>
+            {' | '}
+            <span>Updated: {new Date(selectedBalance.last_updated_at).toLocaleString()}</span>
+          </div>
+        )}
+
+        <div style={{ ...fieldWrap, marginBottom: '0.75rem' }}>
+          <label>New Metres on Hand</label>
+          <input
+            name="new_metres"
+            type="number"
+            min="0"
+            step="0.001"
+            style={inputStyle}
+            placeholder="Correct total metres (not a delta)"
+            value={newMetres}
+            onChange={(event) => setNewMetres(event.target.value)}
+            required
+          />
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+            Enter the correct total metres for this colour, not a change.
+            {parsedMetres !== null && Number.isFinite(parsedMetres) && (
+              <> Reference: {fmt(parsedMetres / METRES_PER_BUNDLE)} bundles.</>
+            )}
+          </span>
+        </div>
+        {deltaMetres !== null && (
+          <div style={{ ...skuInfoBox, marginBottom: '0.75rem', color: deltaMetres >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 700 }}>
+            Change: {deltaMetres >= 0 ? '+' : ''}{fmt(deltaMetres)} m ({deltaMetres >= 0 ? '+' : ''}{fmt(deltaMetres / METRES_PER_BUNDLE)} bundles)
+          </div>
+        )}
         <div style={{ ...fieldWrap, marginBottom: '0.75rem' }}>
           <label>Reason (required)</label>
           <input name="reason" style={inputStyle} placeholder="e.g. Physical count discrepancy" required />
@@ -1035,7 +1097,7 @@ function HistorySection({ history }: { history: CorrectionHistoryRow[] }) {
 export function StockCorrectionForm({
   readyBalances,
   cuttingsBalances,
-  velvetBalance,
+  velvetBalances,
   wipLines,
   shapes,
   bindis,
@@ -1072,7 +1134,7 @@ export function StockCorrectionForm({
           shapes={shapes} bindis={bindis} sizes={sizes}
         />
       )}
-      {stage === 'velvet' && <VelvetForm balance={velvetBalance} />}
+      {stage === 'velvet' && <VelvetForm balances={velvetBalances} />}
       {stage === 'wip' && <WipForm wipLines={wipLines} />}
 
       <HistorySection history={history} />

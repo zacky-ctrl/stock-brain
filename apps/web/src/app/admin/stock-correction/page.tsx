@@ -36,9 +36,9 @@ export default async function StockCorrectionPage() {
       .order('shape_design_id'),
     supabase
       .from('velvet_stock_balance')
-      .select('id, bundles_on_hand')
+      .select('id, bindi_colour_id, metres_on_hand, last_updated_at, bindi_colours(code, name)')
       .eq('velvet_type', 'standard')
-      .single(),
+      .order('bindi_colour_id', { ascending: true, nullsFirst: true }),
     supabase
       .from('labour_jobs')
       .select(`
@@ -108,9 +108,27 @@ export default async function StockCorrectionPage() {
     available_qty: Number(b.available_qty),
   }))
 
-  const velvetBalance: VelvetBalance | null = velvetRaw
-    ? { bundles_on_hand: Number(velvetRaw.bundles_on_hand) }
-    : null
+  type VelvetRaw = {
+    id: string
+    bindi_colour_id: string | null
+    metres_on_hand: number | string
+    last_updated_at: string
+    bindi_colours: { code: string; name: string | null } | { code: string; name: string | null }[] | null
+  }
+
+  const velvetBalances: VelvetBalance[] = ((velvetRaw ?? []) as unknown as VelvetRaw[]).map((row) => {
+    const colour = Array.isArray(row.bindi_colours) ? row.bindi_colours[0] ?? null : row.bindi_colours
+    const colourLabel = row.bindi_colour_id
+      ? (colour?.name ?? colour?.code ?? row.bindi_colour_id)
+      : 'Generic (legacy/no colour)'
+    return {
+      id: row.id,
+      bindi_colour_id: row.bindi_colour_id,
+      colour_label: colourLabel,
+      metres_on_hand: Number(row.metres_on_hand),
+      last_updated_at: row.last_updated_at,
+    }
+  })
 
   type JobRaw = {
     id: string
@@ -154,7 +172,7 @@ export default async function StockCorrectionPage() {
   const entityLabelMap = new Map<string, string>()
   for (const b of readyBalances) entityLabelMap.set(b.id, b.label)
   for (const b of cuttingsBalances) entityLabelMap.set(b.id, b.label)
-  if (velvetRaw?.id) entityLabelMap.set(velvetRaw.id as string, 'Velvet (standard)')
+  for (const b of velvetBalances) entityLabelMap.set(b.id, `Velvet / ${b.colour_label}`)
   for (const l of wipLines) entityLabelMap.set(l.id, l.line_label)
 
   const history: CorrectionHistoryRow[] = (historyRaw ?? []).map((h) => ({
@@ -223,7 +241,7 @@ export default async function StockCorrectionPage() {
       <StockCorrectionForm
         readyBalances={readyBalances}
         cuttingsBalances={cuttingsBalances}
-        velvetBalance={velvetBalance}
+        velvetBalances={velvetBalances}
         wipLines={wipLines}
         shapes={shapeDims}
         bindis={bindiDims}
