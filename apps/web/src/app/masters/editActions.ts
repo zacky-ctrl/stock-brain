@@ -122,7 +122,28 @@ export async function updateCustomer(_prev: ActionState, fd: FormData): Promise<
 export async function updateLabourUnit(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const id = fd.get('id') as string
   if (!id) return { error: 'ID missing' }
+
+  const serialRaw = (fd.get('serial_number') as string ?? '').trim()
+  const serial = parseInt(serialRaw, 10)
+  if (!serialRaw || !Number.isInteger(serial) || serial < 1) {
+    return { error: 'Serial number must be a positive integer.' }
+  }
+
+  const supabase = createServerSupabaseClient()
+
+  const { data: conflict } = await supabase
+    .from('labour_units')
+    .select('id')
+    .eq('serial_number', serial)
+    .neq('id', id)
+    .maybeSingle()
+
+  if (conflict) {
+    return { error: 'Serial number already exists for another labour unit.' }
+  }
+
   return updateMaster('labour_units', id, {
+    serial_number: serial,
     name: fd.get('name') as string,
     notes: (fd.get('notes') as string) || null,
     is_active: fd.get('is_active') === 'true',

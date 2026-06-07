@@ -27,6 +27,7 @@ export default async function LabourUnitsPage() {
             { key: 'created_at', label: 'Created', type: 'date' as const },
           ]}
           editFields={[
+            { name: 'serial_number', label: 'Serial #', type: 'number', valueKey: 'serial_number' },
             { name: 'name', label: 'Name', type: 'text', valueKey: 'name' },
             { name: 'notes', label: 'Notes', type: 'text', valueKey: 'notes' },
             { name: 'is_active', label: 'Active', type: 'boolean', valueKey: 'is_active' },

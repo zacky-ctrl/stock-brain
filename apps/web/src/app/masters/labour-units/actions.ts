@@ -31,7 +31,12 @@ export async function addLabourUnit(
       phone,
       serial_number: nextSerial,
     })
-    if (error) return { error: error.message }
+    if (error) {
+      if (error.code === '23505') {
+        return { error: 'Serial number already exists. Please try again.' }
+      }
+      return { error: error.message }
+    }
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to save' }
   }
