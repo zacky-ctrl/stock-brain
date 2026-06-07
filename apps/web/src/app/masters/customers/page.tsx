@@ -3,6 +3,7 @@ import { AddCustomerForm } from './Form'
 import { CustomerCards } from './CustomerCards'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionHeader } from '@/components/ui/SectionHeader'
+import { Button } from '@/components/ui/Button'
 import type { CustomerRow, DabbiOption } from './CustomerCards'
 
 const CUSTOMER_SELECT =
@@ -48,7 +49,14 @@ export default async function CustomersPage() {
 
   return (
     <div>
-      <PageHeader title="Customers" />
+      <PageHeader
+        title="Customers"
+        actions={
+          <a href="#add-customer">
+            <Button variant="primary">+ Add Customer</Button>
+          </a>
+        }
+      />
       {customersResult.error && (
         <p style={{ color: 'var(--danger)', fontSize: 'var(--text-sm)' }}>Error: {customersResult.error.message}</p>
       )}
@@ -58,8 +66,10 @@ export default async function CustomersPage() {
       {customers.length > 0 && (
         <CustomerCards customers={customers} dabbiColours={dabbiColours} />
       )}
-      <SectionHeader title="Add Customer" />
-      <AddCustomerForm dabbiColours={dabbiColours} />
+      <div id="add-customer">
+        <SectionHeader title="Add Customer" />
+        <AddCustomerForm dabbiColours={dabbiColours} />
+      </div>
     </div>
   )
 }
