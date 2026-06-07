@@ -18,8 +18,57 @@ type CustomerInsert = {
   payment_risk_flag: boolean
 }
 
+type CustomerDuplicateRow = {
+  id: string
+  name: string
+  entity_name: string | null
+  address: string | null
+  phone_number: string | null
+}
+
 function isMissingDefaultDabbiColumn(message: string): boolean {
   return message.includes('default_dabbi_colour_id')
+}
+
+function digitCount(value: string | null): number {
+  return value?.replace(/\D/g, '').length ?? 0
+}
+
+function normalizeCustomerText(value: string | null): string {
+  return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+async function findDuplicateCustomer({
+  supabase,
+  name,
+  entityName,
+  address,
+  phoneNumber,
+}: {
+  supabase: ReturnType<typeof createServerSupabaseClient>
+  name: string
+  entityName: string | null
+  address: string | null
+  phoneNumber: string | null
+}): Promise<CustomerDuplicateRow | null> {
+  const { data } = await supabase
+    .from('customers')
+    .select('id, name, entity_name, address, phone_number')
+    .limit(1000)
+
+  const normalizedName = normalizeCustomerText(name)
+  const normalizedEntity = normalizeCustomerText(entityName)
+  const normalizedAddress = normalizeCustomerText(address)
+  const normalizedPhone = phoneNumber?.replace(/\D/g, '') ?? ''
+
+  return ((data ?? []) as unknown as CustomerDuplicateRow[]).find((customer) => {
+    const samePhone = normalizedPhone.length >= 10 && customer.phone_number?.replace(/\D/g, '') === normalizedPhone
+    const sameIdentity = normalizeCustomerText(customer.name) === normalizedName
+      && normalizeCustomerText(customer.entity_name) === normalizedEntity
+      && normalizeCustomerText(customer.address) === normalizedAddress
+
+    return samePhone || sameIdentity
+  }) ?? null
 }
 
 export async function addCustomer(
@@ -39,6 +88,7 @@ export async function addCustomer(
 
   if (!name) return { error: 'Name is required' }
   if (!brandRule) return { error: 'Brand rule is required' }
+  if (phoneNumber && digitCount(phoneNumber) < 10) return { error: 'Phone number must have at least 10 digits' }
 
   const validRules = ['no_preference', 'prefer_nirankari', 'prefer_suhela', 'strict_nirankari', 'strict_suhela']
   if (!validRules.includes(brandRule)) return { error: 'Invalid brand rule' }
@@ -50,6 +100,9 @@ export async function addCustomer(
 
   try {
     const supabase = createServerSupabaseClient()
+    const duplicate = await findDuplicateCustomer({ supabase, name, entityName, address, phoneNumber })
+    if (duplicate) return { error: `Customer already exists: ${duplicate.name}` }
+
     const payload: CustomerInsert = {
       name,
       entity_name: entityName,
@@ -87,5 +140,6 @@ export async function addCustomer(
   }
 
   revalidatePath('/masters/customers')
+  revalidatePath('/orders/new')
   return { success: `Added: ${name}` }
 }

@@ -1,7 +1,8 @@
 'use client'
 
-import { useActionState, useState, useCallback } from 'react'
-import { createOrder } from './actions'
+import { useActionState, useState, useCallback, useTransition } from 'react'
+import { createOrder, quickAddCustomer } from './actions'
+import type { QuickCustomerState } from './actions'
 import type { ActionState } from '@/lib/masters'
 import { fieldWrap, inputStyle, selectStyle, btnPrimary, msgError } from '@/lib/ui'
 import type { CSSProperties } from 'react'
@@ -124,7 +125,19 @@ export function CreateOrderForm({
   colourMaster = [],
 }: CreateOrderFormProps) {
   const [state, formAction, isPending] = useActionState<ActionState, FormData>(createOrder, null)
+  const [customerOptions, setCustomerOptions] = useState<MasterOption[]>(customers)
   const [customerId, setCustomerId] = useState('')
+  const [showQuickCustomer, setShowQuickCustomer] = useState(false)
+  const [quickCustomerState, setQuickCustomerState] = useState<QuickCustomerState | null>(null)
+  const [quickCustomerDraft, setQuickCustomerDraft] = useState({
+    name: '',
+    entity_name: '',
+    address: '',
+    phone_number: '',
+    transport_name: '',
+    default_dabbi_colour_id: '',
+  })
+  const [isAddingCustomer, startAddingCustomer] = useTransition()
   const [orderDate, setOrderDate] = useState(() => new Date().toISOString().split('T')[0])
   const [promisedDate, setPromisedDate] = useState('')
   const [reference, setReference] = useState('')
@@ -135,7 +148,7 @@ export function CreateOrderForm({
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({})
   const [matrixChanges, setMatrixChanges] = useState<MatrixChangeEvent[]>([])
 
-  const selectedCustomerDefaultDabbi = customers.find((customer) => customer.id === customerId)?.defaultDabbiColourId ?? ''
+  const selectedCustomerDefaultDabbi = customerOptions.find((customer) => customer.id === customerId)?.defaultDabbiColourId ?? ''
 
   const addLine = () => setLines((prev) => [...prev, emptyLine(selectedCustomerDefaultDabbi)])
   const removeLine = (i: number) => setLines((prev) => prev.filter((_, idx) => idx !== i))
@@ -144,7 +157,7 @@ export function CreateOrderForm({
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)))
 
   const handleCustomerChange = (nextCustomerId: string) => {
-    const defaultDabbiColourId = customers.find((customer) => customer.id === nextCustomerId)?.defaultDabbiColourId ?? ''
+    const defaultDabbiColourId = customerOptions.find((customer) => customer.id === nextCustomerId)?.defaultDabbiColourId ?? ''
     setCustomerId(nextCustomerId)
     if (!defaultDabbiColourId) return
     setMatrixDabbiId(defaultDabbiColourId)
@@ -152,6 +165,35 @@ export function CreateOrderForm({
       ...line,
       dabbi_colour_id: line.dabbi_colour_id || defaultDabbiColourId,
     })))
+  }
+
+  const handleQuickCustomerDraftChange = (field: keyof typeof quickCustomerDraft, value: string) => {
+    setQuickCustomerDraft((current) => ({ ...current, [field]: value }))
+  }
+
+  const handleQuickCustomerSubmit = () => {
+    startAddingCustomer(async () => {
+      const formData = new FormData()
+      Object.entries(quickCustomerDraft).forEach(([key, value]) => formData.set(key, value))
+      const result = await quickAddCustomer(formData)
+      setQuickCustomerState(result)
+      if ('error' in result) return
+
+      setCustomerOptions((prev) => {
+        const withoutDuplicate = prev.filter((customer) => customer.id !== result.customer.id)
+        return [...withoutDuplicate, result.customer].sort((a, b) => a.label.localeCompare(b.label))
+      })
+      handleCustomerChange(result.customer.id)
+      setShowQuickCustomer(false)
+      setQuickCustomerDraft({
+        name: '',
+        entity_name: '',
+        address: '',
+        phone_number: '',
+        transport_name: '',
+        default_dabbi_colour_id: '',
+      })
+    })
   }
 
   const handleMatrixCellChange = useCallback((change: MatrixChangeEvent) => {
@@ -239,21 +281,143 @@ export function CreateOrderForm({
         <div style={{ marginBottom: '1.5rem' }}>
           <div style={{ ...fieldWrap, marginBottom: '0.5rem' }}>
             <label>Customer</label>
-            <select
-              name="customer_id"
-              style={selectStyle}
-              required
-              value={customerId}
-              onChange={(e) => handleCustomerChange(e.target.value)}
-            >
-              <option value="">Select customer…</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <select
+                name="customer_id"
+                style={{ ...selectStyle, flex: '1 1 auto' }}
+                required
+                value={customerId}
+                onChange={(e) => handleCustomerChange(e.target.value)}
+              >
+                <option value="">Select customer…</option>
+                {customerOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowQuickCustomer((current) => !current)}
+                style={{
+                  minHeight: '2.5rem',
+                  padding: '0 0.8rem',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  background: showQuickCustomer ? 'var(--accent-soft)' : 'var(--bg-elevated)',
+                  color: showQuickCustomer ? 'var(--accent-bright)' : 'var(--text-primary)',
+                  fontWeight: 800,
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                }}
+              >
+                + Customer
+              </button>
+            </div>
           </div>
+
+          {showQuickCustomer && (
+            <div
+              style={{
+                display: 'grid',
+                gap: '0.75rem',
+                margin: '0 0 1rem',
+                padding: '0.85rem',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--bg-elevated)',
+              }}
+            >
+              {quickCustomerState && 'error' in quickCustomerState && (
+                <p style={{ ...msgError, margin: 0 }}>x {quickCustomerState.error}</p>
+              )}
+              <div style={headerGrid}>
+                <div style={fieldWrap}>
+                  <label>Name</label>
+                  <input
+                    value={quickCustomerDraft.name}
+                    onChange={(event) => handleQuickCustomerDraftChange('name', event.target.value)}
+                    required
+                    style={inputStyle}
+                    placeholder="Customer name"
+                  />
+                </div>
+                <div style={fieldWrap}>
+                  <label>Entity / Firm</label>
+                  <input
+                    value={quickCustomerDraft.entity_name}
+                    onChange={(event) => handleQuickCustomerDraftChange('entity_name', event.target.value)}
+                    style={inputStyle}
+                    placeholder="Optional billing name"
+                  />
+                </div>
+              </div>
+              <div style={headerGrid}>
+                <div style={fieldWrap}>
+                  <label>Location / Address</label>
+                  <input
+                    value={quickCustomerDraft.address}
+                    onChange={(event) => handleQuickCustomerDraftChange('address', event.target.value)}
+                    style={inputStyle}
+                    placeholder="City, market, address"
+                  />
+                </div>
+                <div style={fieldWrap}>
+                  <label>Phone</label>
+                  <input
+                    value={quickCustomerDraft.phone_number}
+                    onChange={(event) => handleQuickCustomerDraftChange('phone_number', event.target.value)}
+                    inputMode="tel"
+                    style={inputStyle}
+                    placeholder="10 digit phone"
+                  />
+                </div>
+              </div>
+              <div style={headerGrid}>
+                <div style={fieldWrap}>
+                  <label>Transport</label>
+                  <input
+                    value={quickCustomerDraft.transport_name}
+                    onChange={(event) => handleQuickCustomerDraftChange('transport_name', event.target.value)}
+                    style={inputStyle}
+                    placeholder="Preferred transport"
+                  />
+                </div>
+                <div style={fieldWrap}>
+                  <label>Default Dabbi</label>
+                  <select
+                    value={quickCustomerDraft.default_dabbi_colour_id}
+                    onChange={(event) => handleQuickCustomerDraftChange('default_dabbi_colour_id', event.target.value)}
+                    style={selectStyle}
+                  >
+                    <option value="">No default</option>
+                    {dabbiColours.map((d) => (
+                      <option key={d.id} value={d.id}>{d.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center' }}>
+                <button type="button" onClick={handleQuickCustomerSubmit} disabled={isAddingCustomer} style={{ ...btnPrimary, marginTop: 0 }}>
+                  {isAddingCustomer ? 'Adding...' : 'Add and select customer'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowQuickCustomer(false)}
+                  style={{
+                    minHeight: '2.5rem',
+                    border: 0,
+                    background: 'transparent',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           <div style={headerGrid}>
             <div style={fieldWrap}>

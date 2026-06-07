@@ -16,6 +16,113 @@ type LineInput = {
   notes?: string | null
 }
 
+export type QuickCustomerState =
+  | {
+      error: string
+    }
+  | {
+      customer: {
+        id: string
+        label: string
+        defaultDabbiColourId: string | null
+      }
+    }
+
+type CustomerDuplicateRow = {
+  id: string
+  name: string
+  entity_name: string | null
+  address: string | null
+  phone_number: string | null
+}
+
+function digitCount(value: string | null): number {
+  return value?.replace(/\D/g, '').length ?? 0
+}
+
+function normalizeCustomerText(value: string | null): string {
+  return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+async function findDuplicateCustomer({
+  supabase,
+  name,
+  entityName,
+  address,
+  phoneNumber,
+}: {
+  supabase: ReturnType<typeof createServerSupabaseClient>
+  name: string
+  entityName: string | null
+  address: string | null
+  phoneNumber: string | null
+}): Promise<CustomerDuplicateRow | null> {
+  const { data } = await supabase
+    .from('customers')
+    .select('id, name, entity_name, address, phone_number')
+    .limit(1000)
+
+  const normalizedName = normalizeCustomerText(name)
+  const normalizedEntity = normalizeCustomerText(entityName)
+  const normalizedAddress = normalizeCustomerText(address)
+  const normalizedPhone = phoneNumber?.replace(/\D/g, '') ?? ''
+
+  return ((data ?? []) as unknown as CustomerDuplicateRow[]).find((customer) => {
+    const samePhone = normalizedPhone.length >= 10 && customer.phone_number?.replace(/\D/g, '') === normalizedPhone
+    const sameIdentity = normalizeCustomerText(customer.name) === normalizedName
+      && normalizeCustomerText(customer.entity_name) === normalizedEntity
+      && normalizeCustomerText(customer.address) === normalizedAddress
+
+    return samePhone || sameIdentity
+  }) ?? null
+}
+
+export async function quickAddCustomer(formData: FormData): Promise<QuickCustomerState> {
+  const name = (formData.get('name') as string ?? '').trim()
+  const entityName = (formData.get('entity_name') as string ?? '').trim() || null
+  const address = (formData.get('address') as string ?? '').trim() || null
+  const phoneNumber = (formData.get('phone_number') as string ?? '').trim() || null
+  const transportName = (formData.get('transport_name') as string ?? '').trim() || null
+  const defaultDabbiColourId = (formData.get('default_dabbi_colour_id') as string ?? '').trim() || null
+
+  if (!name) return { error: 'Customer name is required' }
+  if (phoneNumber && digitCount(phoneNumber) < 10) return { error: 'Phone number must have at least 10 digits' }
+
+  const supabase = createServerSupabaseClient()
+  const duplicate = await findDuplicateCustomer({ supabase, name, entityName, address, phoneNumber })
+  if (duplicate) return { error: `Customer already exists: ${duplicate.name}` }
+
+  const { data, error } = await supabase
+    .from('customers')
+    .insert({
+      name,
+      entity_name: entityName,
+      address,
+      phone_number: phoneNumber,
+      transport_name: transportName,
+      default_dabbi_colour_id: defaultDabbiColourId,
+      brand_rule: 'no_preference',
+      priority_weight: 5,
+      payment_risk_flag: false,
+      is_active: true,
+    })
+    .select('id, name, default_dabbi_colour_id')
+    .single()
+
+  if (error || !data) return { error: error?.message ?? 'Failed to add customer' }
+
+  revalidatePath('/masters/customers')
+  revalidatePath('/orders/new')
+
+  return {
+    customer: {
+      id: data.id as string,
+      label: data.name as string,
+      defaultDabbiColourId: (data.default_dabbi_colour_id as string | null) ?? null,
+    },
+  }
+}
+
 export async function createOrder(
   _prevState: ActionState,
   formData: FormData,

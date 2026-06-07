@@ -22,6 +22,58 @@ function isMissingDefaultDabbiColumn(message: string): boolean {
   return message.includes('default_dabbi_colour_id')
 }
 
+type CustomerDuplicateRow = {
+  id: string
+  name: string
+  entity_name: string | null
+  address: string | null
+  phone_number: string | null
+}
+
+function digitCount(value: string | null): number {
+  return value?.replace(/\D/g, '').length ?? 0
+}
+
+function normalizeCustomerText(value: string | null): string {
+  return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+async function findDuplicateCustomer({
+  supabase,
+  id,
+  name,
+  entityName,
+  address,
+  phoneNumber,
+}: {
+  supabase: ReturnType<typeof createServerSupabaseClient>
+  id: string
+  name: string
+  entityName: string | null
+  address: string | null
+  phoneNumber: string | null
+}): Promise<CustomerDuplicateRow | null> {
+  const { data } = await supabase
+    .from('customers')
+    .select('id, name, entity_name, address, phone_number')
+    .neq('id', id)
+    .limit(1000)
+
+  const normalizedName = normalizeCustomerText(name)
+  const normalizedEntity = normalizeCustomerText(entityName)
+  const normalizedAddress = normalizeCustomerText(address)
+  const normalizedPhone = phoneNumber?.replace(/\D/g, '') ?? ''
+
+  return ((data ?? []) as unknown as CustomerDuplicateRow[]).find((customer) => {
+    const samePhone = normalizedPhone.length >= 10 && customer.phone_number?.replace(/\D/g, '') === normalizedPhone
+    const sameIdentity = normalizeCustomerText(customer.name) === normalizedName
+      && normalizeCustomerText(customer.entity_name) === normalizedEntity
+      && normalizeCustomerText(customer.address) === normalizedAddress
+
+    return samePhone || sameIdentity
+  }) ?? null
+}
+
 export async function updateShapeDesign(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const id = fd.get('id') as string
   if (!id) return { error: 'ID missing' }
@@ -79,18 +131,29 @@ export async function updateDabbiColour(_prev: ActionState, fd: FormData): Promi
 export async function updateCustomer(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const id = fd.get('id') as string
   if (!id) return { error: 'ID missing' }
+  const name = (fd.get('name') as string ?? '').trim()
+  const entityName = (fd.get('entity_name') as string ?? '').trim() || null
+  const address = (fd.get('address') as string ?? '').trim() || null
+  const phoneNumber = (fd.get('phone_number') as string ?? '').trim() || null
+  const transportName = (fd.get('transport_name') as string ?? '').trim() || null
   const yellowRateRaw = (fd.get('yellow_rate_per_gross') as string ?? '').trim()
   const whiteRateRaw = (fd.get('white_rate_per_gross') as string ?? '').trim()
   const yellowRate = yellowRateRaw ? Number(yellowRateRaw) : null
   const whiteRate = whiteRateRaw ? Number(whiteRateRaw) : null
+  if (!name) return { error: 'Name is required' }
+  if (phoneNumber && digitCount(phoneNumber) < 10) return { error: 'Phone number must have at least 10 digits' }
   if (yellowRate !== null && !Number.isFinite(yellowRate)) return { error: 'Yellow rate is invalid' }
   if (whiteRate !== null && !Number.isFinite(whiteRate)) return { error: 'White rate is invalid' }
+  const supabase = createServerSupabaseClient()
+  const duplicate = await findDuplicateCustomer({ supabase, id, name, entityName, address, phoneNumber })
+  if (duplicate) return { error: `Customer already exists: ${duplicate.name}` }
+
   const updates = {
-    name: fd.get('name') as string,
-    entity_name: (fd.get('entity_name') as string) || null,
-    address: (fd.get('address') as string) || null,
-    phone_number: (fd.get('phone_number') as string) || null,
-    transport_name: (fd.get('transport_name') as string) || null,
+    name,
+    entity_name: entityName,
+    address,
+    phone_number: phoneNumber,
+    transport_name: transportName,
     default_dabbi_colour_id: (fd.get('default_dabbi_colour_id') as string) || null,
     yellow_rate_per_gross: yellowRate,
     white_rate_per_gross: whiteRate,
@@ -100,7 +163,7 @@ export async function updateCustomer(_prev: ActionState, fd: FormData): Promise<
     is_active: fd.get('is_active') === 'true',
   }
 
-  const result = await updateMaster('customers', id, updates, ['/masters/customers', '/planning/allocation'])
+  const result = await updateMaster('customers', id, updates, ['/masters/customers', '/orders/new', '/planning/allocation'])
   if (!result || !('error' in result) || !isMissingDefaultDabbiColumn(result.error)) return result
 
   const legacyUpdates = {
@@ -116,7 +179,7 @@ export async function updateCustomer(_prev: ActionState, fd: FormData): Promise<
     notes: updates.notes,
     is_active: updates.is_active,
   }
-  return updateMaster('customers', id, legacyUpdates, ['/masters/customers', '/planning/allocation'])
+  return updateMaster('customers', id, legacyUpdates, ['/masters/customers', '/orders/new', '/planning/allocation'])
 }
 
 export async function updateLabourUnit(_prev: ActionState, fd: FormData): Promise<ActionState> {

@@ -1,17 +1,18 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { Fragment, useActionState, useMemo, useState } from 'react'
+import { Search } from 'lucide-react'
 import { updateCustomer } from '../editActions'
 import { Badge } from '@/components/ui/Badge'
-import { inputStyle, msgError, msgOk, selectStyle } from '@/lib/ui'
+import { inputStyle, msgError, msgOk, selectStyle, tableTd, tableTh } from '@/lib/ui'
 import type { ActionState } from '@/lib/masters'
 
 const BRAND_RULES = [
-  { value: 'no_preference',    label: 'No preference' },
+  { value: 'no_preference', label: 'No preference' },
   { value: 'prefer_nirankari', label: 'Prefer Nirankari' },
-  { value: 'prefer_suhela',    label: 'Prefer Suhela' },
+  { value: 'prefer_suhela', label: 'Prefer Suhela' },
   { value: 'strict_nirankari', label: 'Nirankari only' },
-  { value: 'strict_suhela',    label: 'Suhela only' },
+  { value: 'strict_suhela', label: 'Suhela only' },
 ]
 
 export type CustomerRow = {
@@ -64,7 +65,7 @@ function CustomerEditForm({
   return (
     <form action={formAction} className="customer-edit-panel">
       <input type="hidden" name="id" value={customer.id} />
-      {state && 'error' in state && <p style={msgError}>✗ {state.error}</p>}
+      {state && 'error' in state && <p style={msgError}>x {state.error}</p>}
       {state && 'success' in state && <p style={msgOk}>✓ {state.success}</p>}
 
       <div className="customer-edit-grid">
@@ -77,12 +78,12 @@ function CustomerEditForm({
           <input name="entity_name" defaultValue={customer.entity_name ?? ''} style={inputStyle} />
         </label>
         <label className="customer-edit-wide">
-          <span>Address</span>
+          <span>Location / Address</span>
           <input name="address" defaultValue={customer.address ?? ''} style={inputStyle} />
         </label>
         <label>
           <span>Phone</span>
-          <input name="phone_number" defaultValue={customer.phone_number ?? ''} style={inputStyle} />
+          <input name="phone_number" defaultValue={customer.phone_number ?? ''} style={inputStyle} inputMode="tel" />
         </label>
         <label>
           <span>Transport</span>
@@ -142,76 +143,158 @@ function CustomerEditForm({
 }
 
 export function CustomerCards({ customers, dabbiColours }: Props) {
-  const [expandedId, setExpandedId] = useState<string | null>(customers[0]?.id ?? null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
 
   const dabbiLabelById = new Map(dabbiColours.map((dabbi) => [dabbi.id, dabbi.label]))
+  const visibleCustomers = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    if (!needle) return customers
+    return customers.filter((customer) => {
+      const haystack = [
+        customer.name,
+        customer.entity_name,
+        customer.address,
+        customer.phone_number,
+        customer.transport_name,
+      ].filter(Boolean).join(' ').toLowerCase()
+      return haystack.includes(needle)
+    })
+  }, [customers, query])
 
   return (
-    <div className="customer-card-list">
-      {customers.map((customer) => {
-        const expanded = expandedId === customer.id
-        const editing = editingId === customer.id
-        const defaultDabbi = customer.default_dabbi_colour_id
-          ? dabbiLabelById.get(customer.default_dabbi_colour_id) ?? '-'
-          : '-'
+    <div>
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.55rem',
+          maxWidth: '520px',
+          marginBottom: '1rem',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '0 0.75rem',
+          background: 'var(--bg-elevated)',
+        }}
+      >
+        <Search size={17} color="var(--text-secondary)" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search customer name, phone, location..."
+          style={{ ...inputStyle, border: 0, background: 'transparent', paddingInline: 0 }}
+        />
+      </label>
 
-        return (
-          <article
-            key={customer.id}
-            className="customer-card"
-            onClick={(event) => {
-              const target = event.target as HTMLElement
-              if (target.closest('button, a, input, select, textarea, form')) return
-              setExpandedId(expanded ? null : customer.id)
-            }}
-          >
-            <div className="customer-card-top">
-              <div>
-                <h2>{customer.name}</h2>
-                <p>{customer.entity_name || customer.address || 'No billing details added'}</p>
-              </div>
-              <div className="customer-card-actions">
-                <Badge variant={customer.is_active ? 'success' : 'neutral'} label={customer.is_active ? 'Active' : 'Inactive'} size="sm" />
-                {customer.payment_risk_flag && <Badge variant="danger" label="Risk" size="sm" />}
+      <div className="desktop-table-card" style={{ overflowX: 'auto', marginBottom: '1.5rem' }}>
+        <table style={{ width: '100%', minWidth: '980px', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={tableTh}>Name</th>
+              <th style={tableTh}>Location</th>
+              <th style={tableTh}>Phone</th>
+              <th style={tableTh}>Transport</th>
+              <th style={tableTh}>Dabbi</th>
+              <th style={tableTh}>Rates / Gross</th>
+              <th style={tableTh}>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleCustomers.map((customer) => {
+              const editing = editingId === customer.id
+              const defaultDabbi = customer.default_dabbi_colour_id
+                ? dabbiLabelById.get(customer.default_dabbi_colour_id) ?? '-'
+                : '-'
+
+              return (
+                <Fragment key={customer.id}>
+                  <tr key={customer.id}>
+                    <td style={{ ...tableTd, fontWeight: 900 }}>
+                      <div style={{ color: 'var(--accent-bright)' }}>{customer.name}</div>
+                      <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-xs)', marginTop: '0.2rem' }}>
+                        {customer.entity_name || formatBrandRule(customer.brand_rule)}
+                      </div>
+                      <div style={{ marginTop: '0.35rem', display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                        <Badge variant={customer.is_active ? 'success' : 'neutral'} label={customer.is_active ? 'Active' : 'Inactive'} size="sm" />
+                        {customer.payment_risk_flag && <Badge variant="danger" label="Risk" size="sm" />}
+                      </div>
+                    </td>
+                    <td style={tableTd}>{customer.address || '-'}</td>
+                    <td style={tableTd}>{customer.phone_number || '-'}</td>
+                    <td style={tableTd}>{customer.transport_name || '-'}</td>
+                    <td style={tableTd}>{defaultDabbi}</td>
+                    <td style={tableTd}>Y {fmtRate(customer.yellow_rate_per_gross)} · W {fmtRate(customer.white_rate_per_gross)}</td>
+                    <td style={tableTd}>
+                      <button
+                        type="button"
+                        className="customer-list-edit-button"
+                        onClick={() => setEditingId(editing ? null : customer.id)}
+                      >
+                        {editing ? 'Close' : 'Edit'}
+                      </button>
+                    </td>
+                  </tr>
+                  {editing && (
+                    <tr>
+                      <td colSpan={7} style={{ ...tableTd, background: 'var(--bg-elevated)' }}>
+                        <CustomerEditForm
+                          customer={customer}
+                          dabbiColours={dabbiColours}
+                          onClose={() => setEditingId(null)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mobile-card-list" style={{ marginBottom: '1.5rem' }}>
+        {visibleCustomers.map((customer) => {
+          const editing = editingId === customer.id
+          const defaultDabbi = customer.default_dabbi_colour_id
+            ? dabbiLabelById.get(customer.default_dabbi_colour_id) ?? '-'
+            : '-'
+
+          return (
+            <article key={customer.id} className="mobile-data-card">
+              <div className="mobile-card-top">
+                <div>
+                  <div className="mobile-card-title">{customer.name}</div>
+                  <div className="mobile-card-meta">{customer.address || customer.entity_name || '-'}</div>
+                </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setExpandedId(customer.id)
-                    setEditingId(editing ? null : customer.id)
-                  }}
+                  className="customer-list-edit-button"
+                  onClick={() => setEditingId(editing ? null : customer.id)}
                 >
                   {editing ? 'Close' : 'Edit'}
                 </button>
               </div>
-            </div>
-
-            <div className="customer-card-main">
-              <div><span>Phone</span><strong>{customer.phone_number || '-'}</strong></div>
-              <div><span>Transport</span><strong>{customer.transport_name || '-'}</strong></div>
-              <div><span>Dabbi</span><strong>{defaultDabbi}</strong></div>
-              <div><span>Rates / gross</span><strong>Y {fmtRate(customer.yellow_rate_per_gross)} · W {fmtRate(customer.white_rate_per_gross)}</strong></div>
-            </div>
-
-            {expanded && !editing && (
-              <div className="customer-card-details">
-                <div><span>Address</span><strong>{customer.address || '-'}</strong></div>
-                <div><span>Brand rule</span><strong>{formatBrandRule(customer.brand_rule)}</strong></div>
-                <div><span>Notes</span><strong>{customer.notes || '-'}</strong></div>
-                <div><span>Created</span><strong>{new Date(customer.created_at).toLocaleDateString()}</strong></div>
+              <div className="mobile-card-grid">
+                <div><span className="mobile-card-label">Phone</span><strong className="mobile-card-value">{customer.phone_number || '-'}</strong></div>
+                <div><span className="mobile-card-label">Transport</span><strong className="mobile-card-value">{customer.transport_name || '-'}</strong></div>
+                <div><span className="mobile-card-label">Dabbi</span><strong className="mobile-card-value">{defaultDabbi}</strong></div>
+                <div><span className="mobile-card-label">Rates</span><strong className="mobile-card-value">Y {fmtRate(customer.yellow_rate_per_gross)} · W {fmtRate(customer.white_rate_per_gross)}</strong></div>
               </div>
-            )}
+              {editing && (
+                <CustomerEditForm
+                  customer={customer}
+                  dabbiColours={dabbiColours}
+                  onClose={() => setEditingId(null)}
+                />
+              )}
+            </article>
+          )
+        })}
+      </div>
 
-            {editing && (
-              <CustomerEditForm
-                customer={customer}
-                dabbiColours={dabbiColours}
-                onClose={() => setEditingId(null)}
-              />
-            )}
-          </article>
-        )
-      })}
+      {visibleCustomers.length === 0 && (
+        <p style={{ color: 'var(--text-secondary)', fontWeight: 700 }}>No customers match this search.</p>
+      )}
     </div>
   )
 }
