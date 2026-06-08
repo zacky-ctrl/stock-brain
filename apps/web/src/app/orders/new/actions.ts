@@ -92,23 +92,34 @@ export async function quickAddCustomer(formData: FormData): Promise<QuickCustome
   const duplicate = await findDuplicateCustomer({ supabase, name, entityName, address, phoneNumber })
   if (duplicate) return { error: `Customer already exists: ${duplicate.name}` }
 
-  const { data, error } = await supabase
+  const basePayload = {
+    name,
+    entity_name: entityName,
+    address,
+    phone_number: phoneNumber,
+    transport_name: transportName,
+    brand_rule: 'no_preference',
+    priority_weight: 5,
+    payment_risk_flag: false,
+    is_active: true,
+  }
+
+  let insertResult = await supabase
     .from('customers')
-    .insert({
-      name,
-      entity_name: entityName,
-      address,
-      phone_number: phoneNumber,
-      transport_name: transportName,
-      default_dabbi_colour_id: defaultDabbiColourId,
-      brand_rule: 'no_preference',
-      priority_weight: 5,
-      payment_risk_flag: false,
-      is_active: true,
-    })
+    .insert({ ...basePayload, default_dabbi_colour_id: defaultDabbiColourId })
     .select('id, name, default_dabbi_colour_id')
     .single()
 
+  // Migration 023 adds default_dabbi_colour_id; fall back if schema cache hasn't refreshed yet.
+  if (insertResult.error?.message.includes('default_dabbi_colour_id')) {
+    insertResult = await supabase
+      .from('customers')
+      .insert(basePayload)
+      .select('id, name')
+      .single()
+  }
+
+  const { data, error } = insertResult
   if (error || !data) return { error: error?.message ?? 'Failed to add customer' }
 
   revalidatePath('/masters/customers')
@@ -118,7 +129,7 @@ export async function quickAddCustomer(formData: FormData): Promise<QuickCustome
     customer: {
       id: data.id as string,
       label: data.name as string,
-      defaultDabbiColourId: (data.default_dabbi_colour_id as string | null) ?? null,
+      defaultDabbiColourId: ('default_dabbi_colour_id' in data ? (data.default_dabbi_colour_id as string | null) : null) ?? null,
     },
   }
 }
