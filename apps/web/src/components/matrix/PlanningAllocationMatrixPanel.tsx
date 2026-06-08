@@ -70,6 +70,12 @@ const STATUS_COLORS: Record<string, string> = {
   procure_velvet:             '#ef4444',
 }
 
+const METRIC_COLORS: Record<string, string> = {
+  ready:  '#10b981',
+  labour: '#f59e0b',
+  cut:    '#ef4444',
+}
+
 const METRIC_HIGHLIGHT: Record<MatrixMetric, MatrixCellHighlight> = {
   pending: 'normal',
   ready:   'covered',
@@ -197,13 +203,21 @@ export function PlanningAllocationMatrixPanel({
 
   const highlightCell = useCallback((row: MatrixRow, sizeId: string): MatrixCellHighlight => {
     if (metric !== 'pending') {
-      // For non-pending metrics, use a fixed highlight per metric (non-zero cells only)
       const cellQty = row.cells[sizeId] ?? 0
       return cellQty > 0 ? METRIC_HIGHLIGHT[metric] : 'normal'
     }
     const cellStatus = (row.metadata?.cell_status ?? {}) as Record<string, string>
     const status = cellStatus[sizeId] ?? 'ready_to_dispatch'
     return STATUS_TO_HIGHLIGHT[status] ?? 'normal'
+  }, [metric])
+
+  const cellTextColor = useCallback((row: MatrixRow, sizeId: string): string | undefined => {
+    if (metric !== 'pending') {
+      return METRIC_COLORS[metric]
+    }
+    const cellStatus = (row.metadata?.cell_status ?? {}) as Record<string, string>
+    const status = cellStatus[sizeId]
+    return status ? STATUS_COLORS[status] : undefined
   }, [metric])
 
   const toggleBarStyle: CSSProperties = {
@@ -264,6 +278,7 @@ export function PlanningAllocationMatrixPanel({
               data={matrixData}
               mode="view"
               highlightCell={highlightCell}
+              cellTextColor={cellTextColor}
               printTitle={`${printTitle} — ${metric.charAt(0).toUpperCase() + metric.slice(1)}`}
             />
           ) : (

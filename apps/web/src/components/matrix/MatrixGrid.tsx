@@ -17,6 +17,8 @@ export type MatrixGridProps = {
   compactMobile?: boolean
   onCellChange?: (change: MatrixChangeEvent) => void
   highlightCell?: (row: MatrixRow, sizeId: string) => MatrixCellHighlight
+  /** Direct text color for a non-zero cell. When provided, overrides HIGHLIGHT_TEXT. */
+  cellTextColor?: (row: MatrixRow, sizeId: string) => string | undefined
   printTitle?: string
   draftKey?: string
   onSaveComplete?: () => void
@@ -97,6 +99,7 @@ export function MatrixGrid({
   compactMobile = false,
   onCellChange,
   highlightCell,
+  cellTextColor,
   printTitle,
   draftKey,
   onSaveComplete,
@@ -480,8 +483,9 @@ export function MatrixGrid({
 
                   if (mode === 'view') {
                     const qty = row.cells[s.size_id] ?? 0
+                    const directColor = qty > 0 ? cellTextColor?.(row, s.size_id) : undefined
                     const textColor = qty > 0
-                      ? (HIGHLIGHT_TEXT[highlight] ?? 'var(--text-primary)')
+                      ? (directColor ?? HIGHLIGHT_TEXT[highlight] ?? 'var(--text-primary)')
                       : 'var(--text-muted)'
                     return (
                       <td key={s.size_id} style={tdStyle}>
