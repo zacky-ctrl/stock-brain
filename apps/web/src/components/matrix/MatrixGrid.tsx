@@ -63,23 +63,29 @@ function injectPrintStyle() {
   el.textContent = `
 @media print {
   .matrix-no-print { display: none !important; }
-  .matrix-print-root { overflow: visible !important; max-height: none !important; }
-  .matrix-print-root table { border-collapse: collapse; width: 100%; }
-  .matrix-print-root th,
-  .matrix-print-root td {
-    border: 1px solid #000 !important;
+  .matrix-print-root { display: none !important; }
+  .matrix-print-only { display: block !important; font-family: Arial, Helvetica, sans-serif; font-size: 9pt; }
+  .matrix-print-only table { border-collapse: collapse; width: 100%; }
+  .matrix-print-only th,
+  .matrix-print-only td {
+    border: 1px solid #000;
     padding: 2px 5px;
     font-size: 9pt;
-    background: #fff !important;
-    color: #000 !important;
   }
-  .matrix-print-root .matrix-header-row th {
+  .matrix-print-only .mpo-hdr {
     background: #1e3a5f !important;
     color: #fff !important;
+    font-weight: 700;
+    text-align: center;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .matrix-print-title { font-size: 11pt; font-weight: bold; margin-bottom: 6pt; }
+  .matrix-print-only .mpo-design { font-weight: 700; text-align: left; }
+  .matrix-print-only .mpo-clr { text-align: center; font-weight: 600; }
+  .matrix-print-only .mpo-cell { text-align: center; font-variant-numeric: tabular-nums; }
+  .matrix-print-only .mpo-total { text-align: center; font-weight: 700; background: #f5f5f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .matrix-print-only .mpo-footer td { background: #eaeaea !important; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .matrix-print-title { font-size: 11pt; font-weight: bold; margin-bottom: 4pt; }
   .matrix-print-label { font-size: 9pt; color: #333; margin-bottom: 2pt; }
 }
 `
@@ -383,7 +389,11 @@ export function MatrixGrid({
 
   // ── render ────────────────────────────────────────────────
 
+  // Separate renderedDesigns tracker for the print table
+  const printRenderedDesigns = new Set<string>()
+
   return (
+    <>
     <div
       className={`matrix-print-root${compactMobile ? ' matrix-grid-compact-mobile' : ''}`}
       style={{ position: 'relative', overflow: 'auto', maxHeight: '70vh' }}
@@ -622,6 +632,72 @@ export function MatrixGrid({
         </div>
       )}
     </div>
+
+    {/* ── Print-only table — no sticky positioning, renders correctly on paper ── */}
+    <div className="matrix-print-only" style={{ display: 'none' }}>
+      {(printTitle || data.context_label || data.date_label) && (
+        <div style={{ marginBottom: '6pt' }}>
+          {printTitle && <div className="matrix-print-title">{printTitle}</div>}
+          {data.context_label && <div className="matrix-print-label">{data.context_label}</div>}
+          {data.date_label && <div className="matrix-print-label">{data.date_label}</div>}
+        </div>
+      )}
+      <table>
+        <thead>
+          <tr>
+            <th className="mpo-hdr" style={{ textAlign: 'left' }}>Design</th>
+            <th className="mpo-hdr">CLR</th>
+            {data.sizes.map((s) => (
+              <th key={s.size_id} className="mpo-hdr">{s.size_name}</th>
+            ))}
+            <th className="mpo-hdr">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.rows.map((row) => {
+            const rowKey = `${row.design_id}|${row.colour_id}`
+            const isFirst = !printRenderedDesigns.has(row.design_id)
+            if (isFirst) printRenderedDesigns.add(row.design_id)
+            const span = designSpan.get(row.design_id) ?? 1
+            const rowTotal = data.sizes.reduce((sum, s) => sum + (row.cells[s.size_id] ?? 0), 0)
+            return (
+              <tr key={rowKey}>
+                {isFirst && (
+                  <td rowSpan={span} className="mpo-design">{row.design_name}</td>
+                )}
+                <td className="mpo-clr">{row.colour_code}</td>
+                {data.sizes.map((s) => {
+                  const qty = row.cells[s.size_id] ?? 0
+                  return (
+                    <td key={s.size_id} className="mpo-cell">{qty > 0 ? fmt(qty) : ''}</td>
+                  )
+                })}
+                <td className="mpo-total">{rowTotal > 0 ? fmt(rowTotal) : '—'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+        {data.rows.length > 0 && (
+          <tfoot className="mpo-footer">
+            <tr>
+              <td colSpan={2} style={{ textAlign: 'left', fontWeight: 700, fontSize: '9pt', textTransform: 'uppercase' }}>
+                Grand Total
+              </td>
+              {data.sizes.map((s) => {
+                const colTotal = sizeColumnTotals[s.size_id] ?? 0
+                return (
+                  <td key={s.size_id} className="mpo-cell" style={{ fontWeight: 700 }}>
+                    {fmt(colTotal)}
+                  </td>
+                )
+              })}
+              <td className="mpo-total">{grandTotal > 0 ? fmt(grandTotal) : '—'}</td>
+            </tr>
+          </tfoot>
+        )}
+      </table>
+    </div>
+    </>
   )
 }
 
