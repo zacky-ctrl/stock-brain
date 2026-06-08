@@ -27,6 +27,14 @@ export function MatrixFilterBar({
     })
   }
 
+  const handleCheckboxToggle = (key: string, value: string) => {
+    const current = activeFilters[key] ?? []
+    const next = current.includes(value)
+      ? current.filter((v) => v !== value)
+      : [...current, value]
+    onFilterChange({ ...activeFilters, [key]: next })
+  }
+
   const clearAll = () => {
     const cleared: ActiveFilters = {}
     for (const f of filterConfig.fields) cleared[f.key] = []
@@ -35,7 +43,7 @@ export function MatrixFilterBar({
 
   const stripStyle: CSSProperties = {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: '0.6rem',
     flexWrap: 'wrap',
     marginBottom: '0.75rem',
@@ -47,10 +55,7 @@ export function MatrixFilterBar({
     fontFamily: 'monospace',
     fontSize: '0.8rem',
     padding: '0.2rem 0.4rem',
-    borderTopWidth: '1px',
-    borderBottomWidth: '1px',
-    borderLeftWidth: '1px',
-    borderRightWidth: '1px',
+    borderWidth: '1px',
     borderStyle: 'solid',
     borderColor: '#bbb',
     borderRadius: '2px',
@@ -68,9 +73,56 @@ export function MatrixFilterBar({
 
   return (
     <div style={stripStyle} className="matrix-no-print">
-      <span style={{ color: '#999', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>Filter:</span>
+      <span style={{ color: '#999', fontSize: '0.75rem', whiteSpace: 'nowrap', paddingTop: '0.25rem' }}>Filter:</span>
 
       {filterConfig.fields.map((field) => {
+        if (field.multiSelect) {
+          const selected = activeFilters[field.key] ?? []
+          return (
+            <div
+              key={field.key}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}
+            >
+              <span style={{ color: '#999', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>
+                {field.label}:
+              </span>
+              {field.options.map((opt) => {
+                const checked = selected.includes(opt.id)
+                return (
+                  <label
+                    key={opt.id}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.2rem',
+                      padding: '0.15rem 0.4rem',
+                      borderWidth: '1px',
+                      borderStyle: 'solid',
+                      borderColor: checked ? '#1e3a5f' : '#bbb',
+                      borderRadius: '2px',
+                      background: checked ? '#f0f4ff' : '#fff',
+                      color: checked ? '#1e3a5f' : '#555',
+                      cursor: 'pointer',
+                      fontSize: '0.78rem',
+                      fontFamily: 'monospace',
+                      userSelect: 'none',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => handleCheckboxToggle(field.key, opt.id)}
+                      style={{ margin: 0, cursor: 'pointer', accentColor: '#1e3a5f' }}
+                    />
+                    {opt.label}
+                  </label>
+                )
+              })}
+            </div>
+          )
+        }
+
         const selected = (activeFilters[field.key] ?? [])[0] ?? ''
         const isActive = selected !== ''
         return (
@@ -98,10 +150,7 @@ export function MatrixFilterBar({
             fontFamily: 'monospace',
             fontSize: '0.75rem',
             padding: '0.2rem 0.5rem',
-            borderTopWidth: '1px',
-            borderBottomWidth: '1px',
-            borderLeftWidth: '1px',
-            borderRightWidth: '1px',
+            borderWidth: '1px',
             borderStyle: 'solid',
             borderColor: '#ccc',
             borderRadius: '2px',

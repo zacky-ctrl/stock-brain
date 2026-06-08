@@ -103,6 +103,7 @@ export function PlanningAllocationMatrixPanel({
         {
           key: 'status',
           label: 'Status',
+          multiSelect: true,
           options: [...statusesSeen].map((s) => ({ id: s, label: STATUS_LABELS[s] ?? s })),
         },
         {
