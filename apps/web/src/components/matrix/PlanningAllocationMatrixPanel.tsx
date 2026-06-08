@@ -38,11 +38,30 @@ const STATUS_TO_HIGHLIGHT: Record<string, MatrixCellHighlight> = {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  ready_to_dispatch: 'Ready to dispatch',
-  covered_by_wip:    'Covered by WIP',
-  partially_ready:   'Partially ready',
-  partial_coverage:  'Partial coverage',
-  no_coverage:       'No coverage',
+  ready_to_dispatch:          'Ready to dispatch',
+  ready_to_dispatch_override: '⚠ Ready (Override)',
+  covered_by_wip:             'Covered by WIP',
+  give_to_labour:             'Give to Labour',
+  give_to_labour_override:    '⚠ Labour (Override)',
+  cut_on_machine:             'Cut on Machine',
+  cut_on_machine_override:    '⚠ Cut (Override)',
+  procure_velvet:             'Procure Velvet',
+  partially_ready:            'Partially ready',
+  partial_coverage:           'Partial coverage',
+  no_coverage:                'No coverage',
+  fully_dispatched:           'Dispatched',
+  closed:                     'Closed',
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  ready_to_dispatch:          '#10b981',
+  ready_to_dispatch_override: '#10b981',
+  covered_by_wip:             '#3b82f6',
+  give_to_labour:             '#f59e0b',
+  give_to_labour_override:    '#f59e0b',
+  cut_on_machine:             '#ef4444',
+  cut_on_machine_override:    '#ef4444',
+  procure_velvet:             '#ef4444',
 }
 
 const METRIC_HIGHLIGHT: Record<MatrixMetric, MatrixCellHighlight> = {
@@ -104,7 +123,11 @@ export function PlanningAllocationMatrixPanel({
           key: 'status',
           label: 'Status',
           multiSelect: true,
-          options: [...statusesSeen].map((s) => ({ id: s, label: STATUS_LABELS[s] ?? s })),
+          options: [...statusesSeen].map((s) => ({
+            id: s,
+            label: STATUS_LABELS[s] ?? s,
+            color: STATUS_COLORS[s],
+          })),
         },
         {
           key: 'customer',

@@ -475,6 +475,7 @@ export type ReadyStockPlanningRow = {
 export type FilterOption = {
   id: string
   label: string
+  color?: string
 }
 
 export type FilterField = {

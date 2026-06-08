@@ -88,6 +88,16 @@ export function MatrixFilterBar({
               </span>
               {field.options.map((opt) => {
                 const checked = selected.includes(opt.id)
+                const c = opt.color
+                const borderColor = checked
+                  ? (c ?? '#1e3a5f')
+                  : (c ? `${c}66` : '#bbb')
+                const bgColor = checked
+                  ? (c ? `${c}22` : '#f0f4ff')
+                  : (c ? `${c}0d` : '#fff')
+                const textColor = checked
+                  ? (c ?? '#1e3a5f')
+                  : (c ? `${c}cc` : '#555')
                 return (
                   <label
                     key={opt.id}
@@ -98,10 +108,10 @@ export function MatrixFilterBar({
                       padding: '0.15rem 0.4rem',
                       borderWidth: '1px',
                       borderStyle: 'solid',
-                      borderColor: checked ? '#1e3a5f' : '#bbb',
+                      borderColor,
                       borderRadius: '2px',
-                      background: checked ? '#f0f4ff' : '#fff',
-                      color: checked ? '#1e3a5f' : '#555',
+                      background: bgColor,
+                      color: textColor,
                       cursor: 'pointer',
                       fontSize: '0.78rem',
                       fontFamily: 'monospace',
@@ -113,7 +123,7 @@ export function MatrixFilterBar({
                       type="checkbox"
                       checked={checked}
                       onChange={() => handleCheckboxToggle(field.key, opt.id)}
-                      style={{ margin: 0, cursor: 'pointer', accentColor: '#1e3a5f' }}
+                      style={{ margin: 0, cursor: 'pointer', accentColor: c ?? '#1e3a5f' }}
                     />
                     {opt.label}
                   </label>
