@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { resolveInvoicePaymentStatus, type InvoicePaymentStatus } from '@stock-brain/domain'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -77,6 +78,27 @@ type CustomerRow = {
   white_rate_per_gross: number | string | null
 }
 
+type ReceiptAllocationRow = {
+  amount_allocated: number | string
+  customer_receipts: {
+    id: string
+    receipt_number: string | null
+    receipt_date: string
+    amount: number | string
+    mode: string
+    reference: string | null
+    status: string
+  } | {
+    id: string
+    receipt_number: string | null
+    receipt_date: string
+    amount: number | string
+    mode: string
+    reference: string | null
+    status: string
+  }[] | null
+}
+
 type PrintMatrixGroup = {
   key: string
   title: string
@@ -115,6 +137,13 @@ function statusVariant(status: string): 'success' | 'warning' | 'neutral' | 'dan
   if (status === 'issued') return 'success'
   if (status === 'draft') return 'warning'
   if (status === 'cancelled') return 'danger'
+  return 'neutral'
+}
+
+function paymentStatusVariant(status: InvoicePaymentStatus): 'success' | 'warning' | 'neutral' | 'danger' {
+  if (status === 'paid') return 'success'
+  if (status === 'partial') return 'warning'
+  if (status === 'overpaid') return 'danger'
   return 'neutral'
 }
 
@@ -269,6 +298,22 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     `)
     .eq('sales_invoice_id', id)
 
+  const { data: receiptAllocationsRaw } = await supabase
+    .from('sales_invoice_receipt_allocations')
+    .select(`
+      amount_allocated,
+      customer_receipts (
+        id,
+        receipt_number,
+        receipt_date,
+        amount,
+        mode,
+        reference,
+        status
+      )
+    `)
+    .eq('sales_invoice_id', id)
+
   // Fetch customer master rates for the rate-diff warning in the edit form
   const { data: customerRaw } = await supabase
     .from('customers')
@@ -279,6 +324,19 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const customer = customerRaw as unknown as CustomerRow | null
 
   const lines = (linesRaw ?? []) as unknown as InvoiceLineRow[]
+  const receiptAllocations = (receiptAllocationsRaw ?? []) as unknown as ReceiptAllocationRow[]
+  const confirmedReceiptAllocations = receiptAllocations.filter((allocation) => {
+    const receipt = resolveRef(allocation.customer_receipts)
+    return receipt?.status === 'confirmed'
+  })
+  const receivedAmount = confirmedReceiptAllocations.reduce(
+    (total, allocation) => total + Number(allocation.amount_allocated),
+    0,
+  )
+  const outstandingAmount = Math.max(0, Number(invoice.total_amount) - receivedAmount)
+  const paymentStatus = invoice.status === 'issued'
+    ? resolveInvoicePaymentStatus(Number(invoice.total_amount), receivedAmount)
+    : null
   const dispatchLines = lines.filter((l) => l.line_type === 'dispatch')
   const manualLines = lines.filter((l) => l.line_type === 'manual')
   const yellowRateRequired = dispatchLines.some((line) =>
@@ -411,9 +469,72 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                   </Link>
                 </div>
               )}
+              {paymentStatus && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Payment</span>
+                    <Badge variant={paymentStatusVariant(paymentStatus)} label={paymentStatus} size="sm" />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Received</span>
+                    <strong>{money(receivedAmount)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Outstanding</span>
+                    <strong>{money(outstandingAmount)}</strong>
+                  </div>
+                </>
+              )}
             </div>
           </Card>
         </div>
+
+        {invoice.status === 'issued' && (
+          <Card style={{ marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <h3 style={{ margin: 0, fontSize: 'var(--text-base)' }}>Receipt Allocation</h3>
+              {outstandingAmount > 0 && (
+                <Link href={`/accounting/receipts?customer=${invoice.customer_id}`}>
+                  <Button type="button" size="sm" variant="primary">Receive Payment</Button>
+                </Link>
+              )}
+            </div>
+            {confirmedReceiptAllocations.length > 0 ? (
+              <div className="desktop-table-card" style={{ overflowX: 'auto' }}>
+                <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '680px' }}>
+                  <thead>
+                    <tr>
+                      <th style={tableTh}>Receipt</th>
+                      <th style={tableTh}>Date</th>
+                      <th style={tableTh}>Mode</th>
+                      <th style={tableTh}>Reference</th>
+                      <th style={{ ...tableTh, textAlign: 'right' }}>Allocated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {confirmedReceiptAllocations.map((allocation) => {
+                      const receipt = resolveRef(allocation.customer_receipts)
+                      if (!receipt) return null
+                      return (
+                        <tr key={`${receipt.id}-${allocation.amount_allocated}`}>
+                          <td style={{ ...tableTd, fontWeight: 900 }}>{receipt.receipt_number ?? receipt.id.slice(0, 8)}</td>
+                          <td style={tableTd}>{receipt.receipt_date}</td>
+                          <td style={tableTd}>{receipt.mode.toUpperCase()}</td>
+                          <td style={tableTd}>{receipt.reference ?? '-'}</td>
+                          <td style={{ ...tableTd, textAlign: 'right', fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>{money(allocation.amount_allocated)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
+                No receipt has been linked to this invoice yet.
+              </p>
+            )}
+          </Card>
+        )}
 
         {/* Dispatch-backed lines */}
         {dispatchLines.length > 0 && (

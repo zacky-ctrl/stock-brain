@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
+import { resolveInvoicePaymentStatus, type InvoicePaymentStatus } from '@stock-brain/domain'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -28,6 +29,12 @@ type InvoiceRow = {
   }> | null
 }
 
+type ReceiptAllocationRow = {
+  sales_invoice_id: string
+  amount_allocated: number | string
+  customer_receipts: { status: string } | { status: string }[] | null
+}
+
 function money(value: number | string): string {
   return Number(value).toLocaleString('en-IN', {
     minimumFractionDigits: 2,
@@ -47,6 +54,13 @@ function resolveRef<T>(raw: T | T[] | null | undefined): T | null {
   return Array.isArray(raw) ? raw[0] ?? null : raw
 }
 
+function paymentStatusVariant(status: InvoicePaymentStatus): 'success' | 'warning' | 'neutral' | 'danger' {
+  if (status === 'paid') return 'success'
+  if (status === 'partial') return 'warning'
+  if (status === 'overpaid') return 'danger'
+  return 'neutral'
+}
+
 function EmptyNotice({ message }: { message: string }) {
   return (
     <Card>
@@ -57,7 +71,13 @@ function EmptyNotice({ message }: { message: string }) {
   )
 }
 
-function InvoiceTable({ invoices }: { invoices: InvoiceRow[] }) {
+function InvoiceTable({
+  invoices,
+  allocatedByInvoice,
+}: {
+  invoices: InvoiceRow[]
+  allocatedByInvoice: Map<string, number>
+}) {
   if (invoices.length === 0) return null
 
   return (
@@ -75,12 +95,17 @@ function InvoiceTable({ invoices }: { invoices: InvoiceRow[] }) {
               <th style={{ ...tableTh, textAlign: 'right' }}>Goods</th>
               <th style={{ ...tableTh, textAlign: 'right' }}>Transport</th>
               <th style={{ ...tableTh, textAlign: 'right' }}>Total</th>
+              <th style={tableTh}>Payment</th>
               <th style={tableTh}>Action</th>
             </tr>
           </thead>
           <tbody>
             {invoices.map((invoice) => {
               const dispatchLink = resolveRef(invoice.sales_invoice_dispatches?.[0]?.dispatch_events)
+              const allocatedAmount = allocatedByInvoice.get(invoice.id) ?? 0
+              const paymentStatus = invoice.status === 'issued'
+                ? resolveInvoicePaymentStatus(Number(invoice.total_amount), allocatedAmount)
+                : null
               return (
                 <tr key={invoice.id}>
                   <td style={tableTd}>
@@ -105,6 +130,11 @@ function InvoiceTable({ invoices }: { invoices: InvoiceRow[] }) {
                   <td style={{ ...tableTd, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(invoice.transport_charges)}</td>
                   <td style={{ ...tableTd, textAlign: 'right', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{money(invoice.total_amount)}</td>
                   <td style={tableTd}>
+                    {paymentStatus ? (
+                      <Badge variant={paymentStatusVariant(paymentStatus)} label={paymentStatus} size="sm" />
+                    ) : '-'}
+                  </td>
+                  <td style={tableTd}>
                     <Link href={`/accounting/invoices/${invoice.id}`}>
                       <Button type="button" size="sm" variant="secondary">View</Button>
                     </Link>
@@ -119,6 +149,10 @@ function InvoiceTable({ invoices }: { invoices: InvoiceRow[] }) {
       <div className="mobile-card-list" style={{ marginTop: '1rem' }}>
         {invoices.map((invoice) => {
           const dispatchLink = resolveRef(invoice.sales_invoice_dispatches?.[0]?.dispatch_events)
+          const allocatedAmount = allocatedByInvoice.get(invoice.id) ?? 0
+          const paymentStatus = invoice.status === 'issued'
+            ? resolveInvoicePaymentStatus(Number(invoice.total_amount), allocatedAmount)
+            : null
           return (
             <Card key={invoice.id} className="mobile-data-card" padding="sm">
               <div className="mobile-card-top">
@@ -133,6 +167,7 @@ function InvoiceTable({ invoices }: { invoices: InvoiceRow[] }) {
                 <div><span className="mobile-card-label">Transport</span><strong className="mobile-card-value">{money(invoice.transport_charges)}</strong></div>
                 <div><span className="mobile-card-label">Total</span><strong className="mobile-card-value">{money(invoice.total_amount)}</strong></div>
                 <div><span className="mobile-card-label">Challan</span><strong className="mobile-card-value">{dispatchLink?.challan_number ?? '-'}</strong></div>
+                <div><span className="mobile-card-label">Payment</span><strong className="mobile-card-value">{paymentStatus ?? '-'}</strong></div>
               </div>
               <div className="mobile-card-actions">
                 <Link href={`/accounting/invoices/${invoice.id}`}>
@@ -184,6 +219,28 @@ export default async function InvoicesPage({
     .limit(100)
 
   const invoices = (data ?? []) as unknown as InvoiceRow[]
+  const invoiceIds = invoices.map((invoice) => invoice.id)
+  const { data: allocationsRaw } = invoiceIds.length > 0
+    ? await supabase
+        .from('sales_invoice_receipt_allocations')
+        .select(`
+          sales_invoice_id,
+          amount_allocated,
+          customer_receipts (
+            status
+          )
+        `)
+        .in('sales_invoice_id', invoiceIds)
+    : { data: [] }
+  const allocatedByInvoice = new Map<string, number>()
+  for (const allocation of (allocationsRaw ?? []) as unknown as ReceiptAllocationRow[]) {
+    const receipt = resolveRef(allocation.customer_receipts)
+    if (receipt?.status !== 'confirmed') continue
+    allocatedByInvoice.set(
+      allocation.sales_invoice_id,
+      (allocatedByInvoice.get(allocation.sales_invoice_id) ?? 0) + Number(allocation.amount_allocated),
+    )
+  }
   const drafts = invoices.filter((inv) => inv.status === 'draft')
   const issued = invoices.filter((inv) => inv.status === 'issued')
 
@@ -226,7 +283,7 @@ export default async function InvoicesPage({
           {drafts.length === 0 ? (
             <EmptyNotice message="No draft invoices pending review." />
           ) : (
-            <InvoiceTable invoices={drafts} />
+            <InvoiceTable invoices={drafts} allocatedByInvoice={allocatedByInvoice} />
           )}
         </section>
       )}
@@ -236,7 +293,7 @@ export default async function InvoicesPage({
           {issued.length === 0 ? (
             <EmptyNotice message="No issued invoices yet." />
           ) : (
-            <InvoiceTable invoices={issued} />
+            <InvoiceTable invoices={issued} allocatedByInvoice={allocatedByInvoice} />
           )}
         </section>
       )}
