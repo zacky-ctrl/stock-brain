@@ -12,6 +12,7 @@ import { tableTd, tableTh } from '@/lib/ui'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { AccountingTabs } from '../AccountingTabs'
 import { ReceiptForm } from './ReceiptForm'
+import { VoidReceiptForm } from './VoidReceiptForm'
 
 type CustomerRow = {
   id: string
@@ -289,9 +290,12 @@ export default async function ReceiptsPage({
                     </td>
                     <td style={{ ...tableTd, textAlign: 'right', fontWeight: 900, fontVariantNumeric: 'tabular-nums' }}>{money(receipt.amount)}</td>
                     <td style={tableTd}>
-                      <Link href={`/accounting/ledger?customer=${receipt.customer_id}`}>
-                        <Button type="button" size="sm" variant="secondary">Ledger</Button>
-                      </Link>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <Link href={`/accounting/ledger?customer=${receipt.customer_id}`}>
+                          <Button type="button" size="sm" variant="secondary">Ledger</Button>
+                        </Link>
+                        <VoidReceiptForm receiptId={receipt.id} disabled={receipt.status !== 'confirmed'} />
+                      </div>
                     </td>
                   </tr>
                 )
@@ -321,6 +325,7 @@ export default async function ReceiptsPage({
                   <Link href={`/accounting/ledger?customer=${receipt.customer_id}`}>
                     <Button type="button" size="sm" variant="secondary">Ledger</Button>
                   </Link>
+                  <VoidReceiptForm receiptId={receipt.id} disabled={receipt.status !== 'confirmed'} />
                 </div>
               </Card>
             )

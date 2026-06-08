@@ -83,3 +83,30 @@ export async function postCustomerReceiptAction(
   revalidatePath('/accounting/journal')
   return { success: 'Receipt posted' }
 }
+
+export async function voidCustomerReceiptAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const receiptId = formString(formData, 'receipt_id')
+  const reason = formString(formData, 'void_reason')
+
+  if (!receiptId) return { error: 'Receipt is required' }
+  if (!reason) return { error: 'Void reason is required' }
+
+  const supabase = createServerSupabaseClient()
+  const actor = await getActorId()
+
+  const { error } = await supabase.rpc('void_customer_receipt', {
+    p_receipt_id: receiptId,
+    p_actor: actor,
+    p_reason: reason,
+  } as never)
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/accounting/receipts')
+  revalidatePath('/accounting/ledger')
+  revalidatePath('/accounting/journal')
+  return { success: 'Receipt voided' }
+}
