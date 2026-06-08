@@ -30,8 +30,19 @@ const HIGHLIGHT_BG: Record<MatrixCellHighlight, string | undefined> = {
   shortage: 'var(--danger-subtle)',
   covered:  'var(--success-subtle)',
   partial:  'var(--warning-subtle)',
+  wip:      'var(--info-subtle)',
   reserved: 'var(--accent-subtle)',
   excess:   'var(--warning-subtle)',
+}
+
+const HIGHLIGHT_TEXT: Record<MatrixCellHighlight, string | undefined> = {
+  normal:   undefined,
+  shortage: 'var(--danger)',
+  covered:  'var(--success)',
+  partial:  'var(--warning)',
+  wip:      'var(--info)',
+  reserved: 'var(--accent)',
+  excess:   'var(--warning)',
 }
 
 // ── print styles ──────────────────────────────────────────────
@@ -469,12 +480,12 @@ export function MatrixGrid({
 
                   if (mode === 'view') {
                     const qty = row.cells[s.size_id] ?? 0
+                    const textColor = qty > 0
+                      ? (HIGHLIGHT_TEXT[highlight] ?? 'var(--text-primary)')
+                      : 'var(--text-muted)'
                     return (
                       <td key={s.size_id} style={tdStyle}>
-                        <span style={{
-                          fontWeight: qty > 0 ? 600 : undefined,
-                          color: qty > 0 ? 'var(--text-primary)' : 'var(--text-muted)',
-                        }}>
+                        <span style={{ fontWeight: qty > 0 ? 700 : undefined, color: textColor }}>
                           {qty > 0 ? fmt(qty) : ''}
                         </span>
                       </td>

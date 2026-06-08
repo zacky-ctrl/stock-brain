@@ -30,11 +30,17 @@ export type PlanningAllocationMatrixPanelProps = {
 type MatrixMetric = 'pending' | 'ready' | 'labour' | 'cut'
 
 const STATUS_TO_HIGHLIGHT: Record<string, MatrixCellHighlight> = {
-  ready_to_dispatch: 'covered',
-  covered_by_wip:    'partial',
-  partially_ready:   'partial',
-  partial_coverage:  'shortage',
-  no_coverage:       'shortage',
+  ready_to_dispatch:          'covered',
+  ready_to_dispatch_override: 'covered',
+  covered_by_wip:             'wip',
+  give_to_labour:             'partial',
+  give_to_labour_override:    'partial',
+  cut_on_machine:             'shortage',
+  cut_on_machine_override:    'shortage',
+  procure_velvet:             'shortage',
+  partially_ready:            'partial',
+  partial_coverage:           'shortage',
+  no_coverage:                'shortage',
 }
 
 const STATUS_LABELS: Record<string, string> = {

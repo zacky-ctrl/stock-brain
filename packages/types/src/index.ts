@@ -82,7 +82,7 @@ export type MatrixChangeEvent = {
 }
 
 /** Highlight state for a matrix cell — used by planning screens. */
-export type MatrixCellHighlight = 'normal' | 'shortage' | 'covered' | 'partial' | 'reserved' | 'excess'
+export type MatrixCellHighlight = 'normal' | 'shortage' | 'covered' | 'partial' | 'wip' | 'reserved' | 'excess'
 
 // ============================================================
 // Planning allocation engine types
