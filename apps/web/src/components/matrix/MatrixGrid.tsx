@@ -64,33 +64,18 @@ function injectPrintStyle() {
 @media print {
   .matrix-no-print { display: none !important; }
   .matrix-print-root { overflow: visible !important; max-height: none !important; }
-  .matrix-print-root table {
-    border-collapse: collapse;
-    width: 100%;
-    table-layout: fixed;
-  }
+  .matrix-print-root table { border-collapse: collapse; width: 100%; }
   .matrix-print-root th,
   .matrix-print-root td {
-    position: static !important;
-    left: auto !important;
-    top: auto !important;
-    right: auto !important;
-    z-index: auto !important;
     border: 1px solid #000 !important;
-    padding: 2px 4px !important;
-    font-size: 8pt !important;
+    padding: 2px 5px;
+    font-size: 9pt;
     background: #fff !important;
     color: #000 !important;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0 !important;
-    width: auto !important;
   }
   .matrix-print-root .matrix-header-row th {
     background: #1e3a5f !important;
     color: #fff !important;
-    font-weight: bold !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
