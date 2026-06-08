@@ -140,6 +140,31 @@ export {
 } from './accounting/receipts'
 
 export {
+  calculateAutoSupplierPaymentAllocations,
+  calculatePurchaseBill,
+  calculatePurchasePayables,
+  calculateSupplierLedgerSummaries,
+  calculateSupplierOutstandingFromBills,
+  calculateSupplierPaymentAllocationPlan,
+  calculateSupplierRunningLedger,
+  resolvePurchasePaymentStatus,
+  type CalculatedPurchaseBill,
+  type CalculatedPurchaseBillLine,
+  type PurchaseBillCalculationResult,
+  type PurchaseBillCharges,
+  type PurchaseBillSourceLine,
+  type PurchaseLineType,
+  type PurchasePayable,
+  type PurchasePayableInput,
+  type PurchasePaymentStatus,
+  type SupplierLedgerEntryInput,
+  type SupplierLedgerRunningEntry,
+  type SupplierLedgerSummary,
+  type SupplierPaymentAllocationInput,
+  type SupplierPaymentAllocationPlan,
+} from './accounting/purchases'
+
+export {
   METRES_PER_BUNDLE,
   recordVelvetReceipt,
   getVelvetStockBalance,

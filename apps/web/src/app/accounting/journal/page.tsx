@@ -12,6 +12,7 @@ type JournalLineRow = {
   credit_amount: number | string
   memo: string | null
   customers: { name: string } | { name: string }[] | null
+  suppliers: { name: string } | { name: string }[] | null
   accounting_accounts: { code: string; name: string } | { code: string; name: string }[] | null
 }
 
@@ -70,6 +71,9 @@ export default async function JournalPage() {
         credit_amount,
         memo,
         customers (
+          name
+        ),
+        suppliers (
           name
         ),
         accounting_accounts (
@@ -152,7 +156,7 @@ export default async function JournalPage() {
                   <thead>
                     <tr>
                       <th style={tableTh}>Account</th>
-                      <th style={tableTh}>Customer</th>
+                      <th style={tableTh}>Party</th>
                       <th style={tableTh}>Memo</th>
                       <th style={{ ...tableTh, textAlign: 'right' }}>Debit</th>
                       <th style={{ ...tableTh, textAlign: 'right' }}>Credit</th>
@@ -162,12 +166,13 @@ export default async function JournalPage() {
                     {lines.map((line) => {
                       const account = resolveRef(line.accounting_accounts)
                       const customer = resolveRef(line.customers)
+                      const supplier = resolveRef(line.suppliers)
                       return (
                         <tr key={line.id}>
                           <td style={{ ...tableTd, fontWeight: 800 }}>
                             {account ? `${account.code} — ${account.name}` : '-'}
                           </td>
-                          <td style={tableTd}>{customer?.name ?? '-'}</td>
+                          <td style={tableTd}>{customer?.name ?? supplier?.name ?? '-'}</td>
                           <td style={tableTd}>{line.memo ?? '-'}</td>
                           <td style={{ ...tableTd, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                             {Number(line.debit_amount) > 0 ? money(line.debit_amount) : '-'}

@@ -99,10 +99,14 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'ACCOUNTING',
     items: [
-      { href: '/accounting/invoices', label: 'Invoices', icon: ReceiptText },
-      { href: '/accounting/receipts', label: 'Receipts', icon: Banknote },
-      { href: '/accounting/ledger',   label: 'Ledger',   icon: BookOpen },
-      { href: '/accounting/journal',  label: 'Journal',  icon: FileText },
+      { href: '/accounting/invoices',          label: 'Invoices',          icon: ReceiptText },
+      { href: '/accounting/receipts',          label: 'Receipts',          icon: Banknote },
+      { href: '/accounting/ledger',            label: 'Customer Ledger',   icon: BookOpen },
+      { href: '/accounting/purchases',         label: 'Purchases',         icon: PackagePlus },
+      { href: '/accounting/supplier-payments', label: 'Supplier Payments', icon: Banknote },
+      { href: '/accounting/supplier-ledger',   label: 'Supplier Ledger',   icon: BookOpen },
+      { href: '/accounting/suppliers',         label: 'Suppliers',         icon: Users },
+      { href: '/accounting/journal',           label: 'Journal',           icon: FileText },
     ],
   },
   {

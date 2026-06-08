@@ -9,11 +9,23 @@ const TABS: AccountingTab[] = [
   { href: '/accounting/invoices', label: 'Invoices' },
   { href: '/accounting/receipts', label: 'Receipts' },
   { href: '/accounting/ledger', label: 'Customer Ledger' },
+  { href: '/accounting/purchases', label: 'Purchases' },
+  { href: '/accounting/supplier-payments', label: 'Supplier Payments' },
+  { href: '/accounting/supplier-ledger', label: 'Supplier Ledger' },
+  { href: '/accounting/suppliers', label: 'Suppliers' },
   { href: '/accounting/journal', label: 'Journal' },
 ]
 
 type Props = {
-  active: 'invoices' | 'receipts' | 'ledger' | 'journal'
+  active:
+    | 'invoices'
+    | 'receipts'
+    | 'ledger'
+    | 'purchases'
+    | 'supplier-payments'
+    | 'supplier-ledger'
+    | 'suppliers'
+    | 'journal'
 }
 
 export function AccountingTabs({ active }: Props) {
