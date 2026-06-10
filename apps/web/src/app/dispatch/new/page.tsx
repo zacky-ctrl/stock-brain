@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { DispatchForm } from './Form'
-import type { OpenOrderLine, StockOption, ExtraStockOption } from './Form'
+import type { OpenOrderLine, StockOption, ExtraStockOption, DabbiMasterRow, BrandMasterRow } from './Form'
 import { tableTh, tableTd } from '@/lib/ui'
 import { PageHeader } from '@/components/ui/PageHeader'
 import type { SizeMasterRow, DesignMasterRow, ColourMasterRow } from '@stock-brain/domain'
@@ -25,10 +25,18 @@ export default async function NewDispatchPage({
   const supabase = createServerSupabaseClient()
 
   // Master data always needed for the dispatch form matrix view
-  const [{ data: sizesRaw }, { data: shapesRaw }, { data: bindiColoursRaw }] = await Promise.all([
+  const [
+    { data: sizesRaw },
+    { data: shapesRaw },
+    { data: bindiColoursRaw },
+    { data: dabbiColoursRaw },
+    { data: brandsRaw },
+  ] = await Promise.all([
     supabase.from('sizes').select('id, code, name, sort_order').eq('is_active', true).order('sort_order'),
     supabase.from('shape_designs').select('id, code, name, sort_order').eq('is_active', true).order('sort_order'),
     supabase.from('bindi_colours').select('id, code, name, sort_order').eq('is_active', true).order('sort_order'),
+    supabase.from('dabbi_colours').select('id, code, sort_order').eq('is_active', true).order('sort_order'),
+    supabase.from('brands').select('id, code, name').eq('is_active', true).order('name'),
   ])
 
   const sizeMaster: SizeMasterRow[] = (sizesRaw ?? []).map((s) => ({
@@ -47,6 +55,16 @@ export default async function NewDispatchPage({
     code: c.code as string,
     name: ((c as { name?: string | null }).name ?? c.code) as string,
     sort_order: Number((c as { sort_order?: number | null }).sort_order ?? 0),
+  }))
+  const dabbiMaster: DabbiMasterRow[] = (dabbiColoursRaw ?? []).map((d) => ({
+    id: d.id as string,
+    code: d.code as string,
+    sort_order: Number((d as { sort_order?: number | null }).sort_order ?? 0),
+  }))
+  const brandMaster: BrandMasterRow[] = (brandsRaw ?? []).map((b) => ({
+    id: b.id as string,
+    code: b.code as string,
+    name: ((b as { name?: string | null }).name ?? b.code) as string,
   }))
 
   // ── No params: show open orders list ─────────────────────────
@@ -354,6 +372,8 @@ export default async function NewDispatchPage({
       bindi_colour_id: rs.bindi_colour_id as string,
       size_id: rs.size_id as string,
       dabbi_colour_id: rs.dabbi_colour_id as string,
+      brand_id: rs.brand_id as string,
+      brand_name: brandName,
     })
   }
 
@@ -448,6 +468,8 @@ export default async function NewDispatchPage({
           designMaster={designMaster}
           colourMaster={colourMaster}
           extraStockOptions={allExtraStockOptions}
+          dabbiMaster={dabbiMaster}
+          brandMaster={brandMaster}
         />
       )}
     </main>

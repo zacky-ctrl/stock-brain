@@ -21,14 +21,35 @@ import type {
   ColourMasterRow,
   OrderLineForDispatch,
 } from '@stock-brain/domain'
-import type { MatrixChangeEvent, FilterConfig, ActiveFilters, MatrixGridData, MatrixRow } from '@stock-brain/types'
+import type {
+  MatrixChangeEvent,
+  FilterConfig,
+  ActiveFilters,
+  MatrixGridData,
+  MatrixRow,
+  MatrixCellHighlight,
+} from '@stock-brain/types'
 
-// ── Parcel target ────────────────────────────────────────────
+// ── Parcel target ─────────────────────────────────────────────
 const PARCEL_TARGET_MIN = 50
 const PARCEL_TARGET_MAX = 53
 
+// ── Exported types ────────────────────────────────────────────
+
+export type DabbiMasterRow = {
+  id: string
+  code: string
+  sort_order: number
+}
+
+export type BrandMasterRow = {
+  id: string
+  code: string
+  name: string
+}
+
 export type StockOption = {
-  id: string           // ready_stock_balance_id
+  id: string
   brand: string
   available_qty: number
   shape_design_id: string
@@ -48,6 +69,8 @@ export type ExtraStockOption = {
   bindi_colour_id: string
   size_id: string
   dabbi_colour_id: string
+  brand_id: string
+  brand_name: string
 }
 
 export type OpenOrderLine = {
@@ -76,87 +99,131 @@ export type DispatchFormProps = {
   designMaster?: DesignMasterRow[]
   colourMaster?: ColourMasterRow[]
   extraStockOptions?: ExtraStockOption[]
+  dabbiMaster?: DabbiMasterRow[]
+  brandMaster?: BrandMasterRow[]
 }
+
+// ── Internal types ────────────────────────────────────────────
 
 type OrderedLineState = {
   order_id: string
   order_line_id: string
   ready_stock_balance_id: string
   quantity_dispatched: string
-  skipped: boolean           // remove this line from parcel
-  is_substitute: boolean     // send a different SKU instead
-  sub_ready_stock_balance_id: string  // substitute SKU balance id
-  override_reason: string    // reason if going above available stock
+  skipped: boolean
+  is_substitute: boolean
+  sub_ready_stock_balance_id: string
+  override_reason: string
 }
 
 type AddLineState = {
   designId: string
   colourId: string
   sizeId: string
+  dabbiColourId: string
+  brandId: string
   quantity: string
 }
+
+type DispatchSection = {
+  dabbi_colour_id: string
+  dabbi_colour_code: string
+  brand_label: string | null
+  sort_order: number
+}
+
+// ── Pure helpers (module-level, no React deps) ────────────────
 
 function fmt(n: number): string {
   return n % 1 === 0 ? String(n) : n.toFixed(3)
 }
 
-function matrixCellKey(change: MatrixChangeEvent): string {
-  return `${change.design_id}|${change.colour_id}|${change.size_id}`
+/**
+ * 4-part dispatch state key — encodes all 5 dimensions of finished-stock identity
+ * (design + bindi_colour + size + dabbi_colour). Brand is on the balance row, not the
+ * order line, so it is NOT part of this key.
+ */
+function dispatchKey(designId: string, colourId: string, sizeId: string, dabbiColourId: string): string {
+  return `${designId}|${colourId}|${sizeId}|${dabbiColourId}`
 }
 
-function matrixKey(designId: string, colourId: string, sizeId: string): string {
-  return `${designId}|${colourId}|${sizeId}`
-}
-
-function buildInitialMatrixChanges(openLines: OpenOrderLine[]): MatrixChangeEvent[] {
-  const changesByCell = new Map<string, MatrixChangeEvent>()
-
+function buildInitialDispatchState(openLines: OpenOrderLine[]): Record<string, number> {
+  const state: Record<string, number> = {}
   for (const ol of openLines) {
     if (ol.open_qty <= 0) continue
-    const key = `${ol.shape_design_id}|${ol.bindi_colour_id}|${ol.size_id}`
-    const existing = changesByCell.get(key)
-    changesByCell.set(key, {
-      design_id: ol.shape_design_id,
-      colour_id: ol.bindi_colour_id,
-      size_id: ol.size_id,
-      quantity: (existing?.quantity ?? 0) + ol.open_qty,
+    const key = dispatchKey(ol.shape_design_id, ol.bindi_colour_id, ol.size_id, ol.dabbi_colour_id)
+    state[key] = (state[key] ?? 0) + ol.open_qty
+  }
+  return state
+}
+
+/** Returns MatrixChangeEvent[] for one dabbi section from the flat dispatch state. */
+function getSectionChanges(dispatchState: Record<string, number>, dabbiColourId: string): MatrixChangeEvent[] {
+  const changes: MatrixChangeEvent[] = []
+  for (const [key, qty] of Object.entries(dispatchState)) {
+    if (qty <= 0) continue
+    const parts = key.split('|')
+    if (parts.length !== 4 || parts[3] !== dabbiColourId) continue
+    changes.push({ design_id: parts[0], colour_id: parts[1], size_id: parts[2], quantity: qty })
+  }
+  return changes
+}
+
+/**
+ * Builds MatrixGridData for one dabbi section.
+ *
+ * Rows are seeded from open order lines in this section + any extra cells added
+ * via "Add Line". metadata.dabbi_colour_id is embedded so the single
+ * highlightDispatchCell callback can extract it per row.
+ */
+function buildSectionMatrixData(
+  dispatchState: Record<string, number>,
+  section: DispatchSection,
+  openLines: OpenOrderLine[],
+  sizeMaster: SizeMasterRow[],
+  designMaster: DesignMasterRow[],
+  colourMaster: ColourMasterRow[],
+): MatrixGridData {
+  const designMap = new Map(designMaster.map((d) => [d.id, d]))
+  const colourMap = new Map(colourMaster.map((c) => [c.id, c]))
+  const { dabbi_colour_id } = section
+  const rowsByKey = new Map<string, MatrixRow>()
+
+  const ensureRow = (design_id: string, colour_id: string) => {
+    const rk = `${design_id}|${colour_id}`
+    if (rowsByKey.has(rk)) return
+    const design = designMap.get(design_id)
+    const colour = colourMap.get(colour_id)
+    if (!design || !colour) return
+    rowsByKey.set(rk, {
+      design_id,
+      design_name: design.name,
+      colour_id,
+      colour_name: colour.name,
+      colour_code: colour.code,
+      cells: {},
+      metadata: { dabbi_colour_id },
     })
   }
 
-  return [...changesByCell.values()]
-}
+  for (const ol of openLines) {
+    if (ol.dabbi_colour_id !== dabbi_colour_id) continue
+    ensureRow(ol.shape_design_id, ol.bindi_colour_id)
+  }
 
-function buildDispatchMatrixData(
-  changes: MatrixChangeEvent[],
-  sizes: SizeMasterRow[],
-  designs: DesignMasterRow[],
-  colours: ColourMasterRow[],
-  contextLabel: string,
-): MatrixGridData {
-  const designMap = new Map(designs.map((d) => [d.id, d]))
-  const colourMap = new Map(colours.map((c) => [c.id, c]))
-  const rowsByKey = new Map<string, MatrixRow>()
+  for (const key of Object.keys(dispatchState)) {
+    const parts = key.split('|')
+    if (parts.length !== 4 || parts[3] !== dabbi_colour_id) continue
+    ensureRow(parts[0], parts[1])
+  }
 
-  for (const change of changes) {
-    const design = designMap.get(change.design_id)
-    const colour = colourMap.get(change.colour_id)
-    if (!design || !colour) continue
-
-    const rowKey = `${change.design_id}|${change.colour_id}`
-    const existing = rowsByKey.get(rowKey)
-    if (existing) {
-      existing.cells[change.size_id] = change.quantity
-      continue
+  // Fill cells from dispatch state
+  for (const row of rowsByKey.values()) {
+    for (const size of sizeMaster) {
+      const key = dispatchKey(row.design_id, row.colour_id, size.id, dabbi_colour_id)
+      const qty = dispatchState[key] ?? 0
+      if (qty > 0) row.cells[size.id] = qty
     }
-
-    rowsByKey.set(rowKey, {
-      design_id: change.design_id,
-      design_name: design.name,
-      colour_id: change.colour_id,
-      colour_name: colour.name,
-      colour_code: colour.code,
-      cells: { [change.size_id]: change.quantity },
-    })
   }
 
   const rows = [...rowsByKey.values()].sort((a, b) => {
@@ -169,13 +236,35 @@ function buildDispatchMatrixData(
   })
 
   return {
-    sizes: [...sizes]
+    sizes: [...sizeMaster]
       .sort((a, b) => a.sort_order - b.sort_order)
-      .map((size) => ({ size_id: size.id, size_name: size.code, sort_order: size.sort_order })),
+      .map((s) => ({ size_id: s.id, size_name: s.code, sort_order: s.sort_order })),
     rows,
-    context_label: contextLabel,
   }
 }
+
+/** Derives a single brand label for the section header if all available stock is one brand. */
+function getSectionBrandLabel(
+  dabbiColourId: string,
+  openLines: OpenOrderLine[],
+  extraStockOptions: ExtraStockOption[],
+): string | null {
+  const brands = new Set<string>()
+  for (const ol of openLines) {
+    if (ol.dabbi_colour_id !== dabbiColourId) continue
+    for (const opt of ol.stock_options) {
+      if (opt.brand && opt.brand !== '—') brands.add(opt.brand)
+    }
+  }
+  for (const opt of extraStockOptions) {
+    if (opt.dabbi_colour_id === dabbiColourId && opt.brand_name && opt.brand_name !== '—') {
+      brands.add(opt.brand_name)
+    }
+  }
+  return brands.size === 1 ? ([...brands][0] ?? null) : null
+}
+
+// ── Component ─────────────────────────────────────────────────
 
 export function DispatchForm({
   customerId,
@@ -185,6 +274,8 @@ export function DispatchForm({
   designMaster = [],
   colourMaster = [],
   extraStockOptions = [],
+  dabbiMaster = [],
+  brandMaster = [],
 }: DispatchFormProps) {
   const [state, formAction, isPending] = useActionState<DispatchActionState, FormData>(createDispatchAction, null)
   const [releaseState, releaseAction, isReleasePending] = useActionState<ActionState, FormData>(releaseRemainingReservationsAction, null)
@@ -193,10 +284,18 @@ export function DispatchForm({
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({})
   const [showAvailableStock, setShowAvailableStock] = useState(false)
   const dispatchResult = state && 'dispatch_id' in state ? state : null
+
+  // dabbi sections added via Add Line that don't exist in openLines
+  const [extraDabbiIds, setExtraDabbiIds] = useState<string[]>([])
+
+  const firstOpenLineDabbi = openLines[0]?.dabbi_colour_id ?? dabbiMaster[0]?.id ?? ''
+
   const [addLine, setAddLine] = useState<AddLineState>(() => ({
     designId: designMaster[0]?.id ?? '',
     colourId: colourMaster[0]?.id ?? '',
     sizeId: sizeMaster[0]?.id ?? '',
+    dabbiColourId: firstOpenLineDabbi,
+    brandId: brandMaster[0]?.id ?? '',
     quantity: '',
   }))
 
@@ -216,40 +315,62 @@ export function DispatchForm({
   const updateEntry = (i: number, field: keyof OrderedLineState, value: string | boolean) =>
     setEntries((prev) => prev.map((e, idx) => (idx === i ? { ...e, [field]: value } : e)))
 
-  const [matrixChanges, setMatrixChanges] = useState<MatrixChangeEvent[]>(() => buildInitialMatrixChanges(openLines))
-  const [dispatchState, setDispatchState] = useState<Record<string, number>>(() => {
-    const initial: Record<string, number> = {}
-    for (const change of buildInitialMatrixChanges(openLines)) {
-      initial[matrixCellKey(change)] = change.quantity
-    }
-    return initial
-  })
+  // ── 4-part dispatch state ────────────────────────────────────
+  const [dispatchState, setDispatchState] = useState<Record<string, number>>(
+    () => buildInitialDispatchState(openLines),
+  )
 
-  const upsertMatrixChange = useCallback((change: MatrixChangeEvent) => {
-    const key = matrixCellKey(change)
-    setMatrixChanges((prev) => {
-      const idx = prev.findIndex(
-        (c) => c.design_id === change.design_id && c.colour_id === change.colour_id && c.size_id === change.size_id,
-      )
-      if (idx >= 0) {
-        const next = [...prev]
-        next[idx] = change
-        return next
-      }
-      return [...prev, change]
-    })
+  const upsertDispatchCell = useCallback((
+    change: MatrixChangeEvent,
+    dabbiColourId: string,
+  ) => {
+    const key = dispatchKey(change.design_id, change.colour_id, change.size_id, dabbiColourId)
     setDispatchState((prev) => {
       const next = { ...prev }
-      next[key] = change.quantity
+      if (change.quantity > 0) {
+        next[key] = change.quantity
+      } else {
+        delete next[key]
+      }
       return next
     })
   }, [])
 
+  // ── Sections ─────────────────────────────────────────────────
+  const sections = useMemo((): DispatchSection[] => {
+    const seen = new Map<string, { code: string; sort_order: number }>()
+    for (const ol of openLines) {
+      if (!seen.has(ol.dabbi_colour_id)) {
+        const master = dabbiMaster.find((d) => d.id === ol.dabbi_colour_id)
+        seen.set(ol.dabbi_colour_id, {
+          code: ol.dabbi_colour,
+          sort_order: master?.sort_order ?? 999,
+        })
+      }
+    }
+    for (const id of extraDabbiIds) {
+      if (!seen.has(id)) {
+        const master = dabbiMaster.find((d) => d.id === id)
+        seen.set(id, { code: master?.code ?? id, sort_order: master?.sort_order ?? 999 })
+      }
+    }
+    return [...seen.entries()]
+      .map(([id, { code, sort_order }]) => ({
+        dabbi_colour_id: id,
+        dabbi_colour_code: code,
+        sort_order,
+        brand_label: getSectionBrandLabel(id, openLines, extraStockOptions),
+      }))
+      .sort((a, b) => a.sort_order - b.sort_order)
+  }, [openLines, extraDabbiIds, dabbiMaster, extraStockOptions])
+
+  // ── Available stock (dabbi-aware) ────────────────────────────
   const availableStockRows = useMemo(() => {
     const byBalance = new Map<string, {
       shape_design_id: string
       bindi_colour_id: string
       size_id: string
+      dabbi_colour_id: string
       gross_qty: number
       available_qty: number
       committed_qty: number
@@ -260,6 +381,7 @@ export function DispatchForm({
         shape_design_id: option.shape_design_id,
         bindi_colour_id: option.bindi_colour_id,
         size_id: option.size_id,
+        dabbi_colour_id: option.dabbi_colour_id,
         gross_qty: option.available_qty,
         available_qty: option.available_qty,
         committed_qty: 0,
@@ -273,6 +395,7 @@ export function DispatchForm({
           shape_design_id: option.shape_design_id,
           bindi_colour_id: option.bindi_colour_id,
           size_id: option.size_id,
+          dabbi_colour_id: option.dabbi_colour_id,
           gross_qty: Math.max(existing?.gross_qty ?? 0, option.available_qty),
           available_qty: Math.max(existing?.available_qty ?? 0, option.available_qty),
           committed_qty: existing?.committed_qty ?? 0,
@@ -283,21 +406,21 @@ export function DispatchForm({
     return [...byBalance.values()].filter((row) => row.available_qty > 0)
   }, [extraStockOptions, openLines])
 
-  // Build availability map: (design|colour|size) → total available qty
+  // 4-part key: design|colour|size|dabbi_colour_id
   const availableByCell = useMemo(() => {
     const map = new Map<string, number>()
     for (const row of availableStockRows) {
-      const key = `${row.shape_design_id}|${row.bindi_colour_id}|${row.size_id}`
+      const key = dispatchKey(row.shape_design_id, row.bindi_colour_id, row.size_id, row.dabbi_colour_id)
       map.set(key, (map.get(key) ?? 0) + row.available_qty)
     }
     return map
   }, [availableStockRows])
 
-  // Build open qty map: (design|colour|size) → total open qty across lines
+  // 4-part key
   const openQtyByCell = useMemo(() => {
     const map = new Map<string, number>()
     for (const ol of openLines) {
-      const key = `${ol.shape_design_id}|${ol.bindi_colour_id}|${ol.size_id}`
+      const key = dispatchKey(ol.shape_design_id, ol.bindi_colour_id, ol.size_id, ol.dabbi_colour_id)
       map.set(key, (map.get(key) ?? 0) + ol.open_qty)
     }
     return map
@@ -306,6 +429,7 @@ export function DispatchForm({
   const canShowMatrix = sizeMaster.length > 0 && designMaster.length > 0 && colourMaster.length > 0
   const effectiveView = canShowMatrix ? view : 'list'
 
+  // Reference matrices (dabbi-agnostic — for the "show available stock" panel)
   const fullOpenQtyMatrix = useMemo(() =>
     canShowMatrix
       ? buildMatrixFromOrderLines(
@@ -321,8 +445,7 @@ export function DispatchForm({
           { context_label: `Open demand — ${customerName}` },
         )
       : null,
-    [canShowMatrix, openLines, sizeMaster, designMaster, colourMaster, customerName],
-  )
+  [canShowMatrix, openLines, sizeMaster, designMaster, colourMaster, customerName])
 
   const fullAvailStockMatrix = useMemo(() =>
     canShowMatrix
@@ -330,25 +453,15 @@ export function DispatchForm({
           context_label: 'Available ready stock',
         })
       : null,
-    [canShowMatrix, availableStockRows, sizeMaster, designMaster, colourMaster],
-  )
+  [canShowMatrix, availableStockRows, sizeMaster, designMaster, colourMaster])
 
-  const dispatchMatrixData = useMemo(
-    () =>
-      canShowMatrix
-        ? buildDispatchMatrixData(matrixChanges, sizeMaster, designMaster, colourMaster, `Dispatch packing — ${customerName}`)
-        : null,
-    [canShowMatrix, matrixChanges, sizeMaster, designMaster, colourMaster, customerName],
-  )
-
+  // Filter config — built from open lines design+colour combos
   const filterConfig: FilterConfig = useMemo(() => {
-    const sourceMatrix = dispatchMatrixData ?? fullOpenQtyMatrix
-    if (!sourceMatrix) return { fields: [] }
     const designsSeen = new Map<string, string>()
     const coloursSeen = new Map<string, string>()
-    for (const row of sourceMatrix.rows) {
-      designsSeen.set(row.design_id, row.design_name)
-      coloursSeen.set(row.colour_id, row.colour_code)
+    for (const ol of openLines) {
+      designsSeen.set(ol.shape_design_id, ol.shape)
+      coloursSeen.set(ol.bindi_colour_id, ol.bindi_colour)
     }
     return {
       fields: [
@@ -356,80 +469,97 @@ export function DispatchForm({
         { key: 'colour', label: 'CLR', options: [...coloursSeen.entries()].map(([id, label]) => ({ id, label })) },
       ],
     }
-  }, [dispatchMatrixData, fullOpenQtyMatrix])
+  }, [openLines])
 
-  const dispatchMatrixFilteredData = useMemo(
-    () => dispatchMatrixData ? filterMatrixData(dispatchMatrixData, activeFilters, { design: 'design', colour: 'colour' }) : null,
-    [dispatchMatrixData, activeFilters],
-  )
   const availStockMatrixData = useMemo(
-    () => fullAvailStockMatrix ? filterMatrixData(fullAvailStockMatrix, activeFilters, { design: 'design', colour: 'colour' }) : null,
+    () => fullAvailStockMatrix
+      ? filterMatrixData(fullAvailStockMatrix, activeFilters, { design: 'design', colour: 'colour' })
+      : null,
     [fullAvailStockMatrix, activeFilters],
   )
 
+  // ── Highlight callback — reads dabbi_colour_id from row.metadata ──
   const highlightDispatchCell = useCallback(
-    (row: { design_id: string; colour_id: string }, sizeId: string) => {
-      const key = `${row.design_id}|${row.colour_id}|${sizeId}`
+    (row: MatrixRow, sizeId: string): MatrixCellHighlight => {
+      const dabbiColourId = row.metadata?.dabbi_colour_id as string ?? ''
+      const key = dispatchKey(row.design_id, row.colour_id, sizeId, dabbiColourId)
       const entered = dispatchState[key] ?? 0
       const avail = availableByCell.get(key) ?? 0
       const openQty = openQtyByCell.get(key) ?? 0
-      if (openQty <= 0 && entered <= 0) return 'normal' as const
-      if (entered > avail) return 'shortage' as const       // red — cannot dispatch entered qty from ready stock
-      if (entered > openQty) return 'excess' as const       // orange — filler / extra SKU
-      if (entered > 0 && entered < openQty) return 'partial' as const
-      if (entered > 0) return 'covered' as const            // green — full ordered qty can be dispatched
-      return 'normal' as const
+      if (openQty <= 0 && entered <= 0) return 'normal'
+      if (entered > avail) return 'shortage'
+      if (entered > openQty) return 'excess'
+      if (entered > 0 && entered < openQty) return 'partial'
+      if (entered > 0) return 'covered'
+      return 'normal'
     },
     [dispatchState, availableByCell, openQtyByCell],
   )
 
-  const handleDispatchCellChange = useCallback((change: MatrixChangeEvent) => {
-    upsertMatrixChange(change)
-  }, [upsertMatrixChange])
+  const handleDispatchCellChange = useCallback(
+    (change: MatrixChangeEvent, dabbiColourId: string) => {
+      upsertDispatchCell(change, dabbiColourId)
+    },
+    [upsertDispatchCell],
+  )
 
   const handleAddLine = useCallback(() => {
     const quantity = parseFloat(addLine.quantity) || 0
-    if (!addLine.designId || !addLine.colourId || !addLine.sizeId || quantity <= 0) return
-    const key = matrixKey(addLine.designId, addLine.colourId, addLine.sizeId)
-    const currentQty = dispatchState[key] ?? 0
-    upsertMatrixChange({
-      design_id: addLine.designId,
-      colour_id: addLine.colourId,
-      size_id: addLine.sizeId,
-      quantity: currentQty + quantity,
-    })
+    if (!addLine.designId || !addLine.colourId || !addLine.sizeId || !addLine.dabbiColourId || quantity <= 0) return
+
+    const key = dispatchKey(addLine.designId, addLine.colourId, addLine.sizeId, addLine.dabbiColourId)
+    setDispatchState((prev) => ({ ...prev, [key]: (prev[key] ?? 0) + quantity }))
+
+    // If this dabbi doesn't exist in any existing order-line section, create a new section
+    const alreadyInSections = openLines.some((ol) => ol.dabbi_colour_id === addLine.dabbiColourId)
+    if (!alreadyInSections) {
+      setExtraDabbiIds((prev) =>
+        prev.includes(addLine.dabbiColourId) ? prev : [...prev, addLine.dabbiColourId],
+      )
+    }
+
     setAddLine((prev) => ({ ...prev, quantity: '' }))
-  }, [addLine, dispatchState, upsertMatrixChange])
+  }, [addLine, openLines])
 
-  // Matrix dispatch lines — computed once, shared between payload and auto-extras display
+  // ── Matrix dispatch lines (per section → merged) ─────────────
   const matrixDispatchLines = useMemo(() => {
-    const linesForDispatch: OrderLineForDispatch[] = [
-      ...openLines.map((ol) => ({
-        id: ol.id,
-        shape_design_id: ol.shape_design_id,
-        bindi_colour_id: ol.bindi_colour_id,
-        size_id: ol.size_id,
-        open_qty: ol.open_qty,
-        ready_stock_balance_id: ol.stock_options[0]?.id ?? '',
-        available_stock_qty: ol.stock_options[0]?.available_qty ?? 0,
-      })),
-      ...extraStockOptions.map((option) => ({
-        id: `extra:${option.id}`,
-        shape_design_id: option.shape_design_id,
-        bindi_colour_id: option.bindi_colour_id,
-        size_id: option.size_id,
-        open_qty: 0,
-        ready_stock_balance_id: option.id,
-        available_stock_qty: option.available_qty,
-      })),
-    ]
-    return parseMatrixToDispatchLines(
-      matrixChanges.filter((c) => c.quantity > 0),
-      linesForDispatch,
-    )
-  }, [matrixChanges, openLines, extraStockOptions])
+    const allResults: ReturnType<typeof parseMatrixToDispatchLines> = []
 
-  // Matrix payload — memoised so the hidden input value is always in sync with matrixChanges state
+    for (const section of sections) {
+      const changes = getSectionChanges(dispatchState, section.dabbi_colour_id).filter((c) => c.quantity > 0)
+      if (changes.length === 0) continue
+
+      const sectionOpenLines = openLines.filter((ol) => ol.dabbi_colour_id === section.dabbi_colour_id)
+      const sectionExtraOptions = extraStockOptions.filter((opt) => opt.dabbi_colour_id === section.dabbi_colour_id)
+
+      const linesForDispatch: OrderLineForDispatch[] = [
+        ...sectionOpenLines.map((ol) => ({
+          id: ol.id,
+          shape_design_id: ol.shape_design_id,
+          bindi_colour_id: ol.bindi_colour_id,
+          size_id: ol.size_id,
+          open_qty: ol.open_qty,
+          ready_stock_balance_id: ol.stock_options[0]?.id ?? '',
+          available_stock_qty: ol.stock_options[0]?.available_qty ?? 0,
+        })),
+        ...sectionExtraOptions.map((opt) => ({
+          id: `extra:${opt.id}`,
+          shape_design_id: opt.shape_design_id,
+          bindi_colour_id: opt.bindi_colour_id,
+          size_id: opt.size_id,
+          open_qty: 0,
+          ready_stock_balance_id: opt.id,
+          available_stock_qty: opt.available_qty,
+        })),
+      ]
+
+      allResults.push(...parseMatrixToDispatchLines(changes, linesForDispatch))
+    }
+
+    return allResults
+  }, [sections, dispatchState, openLines, extraStockOptions])
+
+  // ── Payloads ─────────────────────────────────────────────────
   const matrixPayload = useMemo(() => {
     const lineById = new Map(openLines.map((ol) => [ol.id, ol]))
 
@@ -444,8 +574,7 @@ export function DispatchForm({
       }))
 
     const autoExtraLines = matrixDispatchLines
-      .filter((dl) => dl.line_type === 'extra')
-      .filter((dl) => dl.ready_stock_balance_id !== '' && dl.quantity_dispatched > 0)
+      .filter((dl) => dl.line_type === 'extra' && dl.ready_stock_balance_id !== '' && dl.quantity_dispatched > 0)
       .map((dl) => ({
         order_id: null,
         order_line_id: null,
@@ -457,7 +586,6 @@ export function DispatchForm({
     return JSON.stringify([...orderedLines, ...autoExtraLines])
   }, [matrixDispatchLines, openLines])
 
-  // List payload — overflow is split into extra by the server action.
   const listPayload = useMemo(() => {
     return JSON.stringify([
       ...entries
@@ -488,65 +616,55 @@ export function DispatchForm({
 
   const payload = effectiveView === 'matrix' ? matrixPayload : listPayload
 
-  // ── Parcel total ─────────────────────────────────────────────
+  // ── Parcel summary ────────────────────────────────────────────
   const { parcelTotal, matrixOrderedTotal, matrixExtraTotal } = useMemo(() => {
-    if (effectiveView === 'matrix') {
-      let orderedSum = 0
-      let excessSum = 0
-      for (const c of matrixChanges) {
-        if (c.quantity <= 0) continue
-        const key = `${c.design_id}|${c.colour_id}|${c.size_id}`
-        if ((availableByCell.get(key) ?? 0) <= 0) continue
-        const openQty = openQtyByCell.get(key) ?? 0
-        orderedSum += Math.min(c.quantity, openQty)
-        excessSum  += Math.max(0, c.quantity - openQty)
-      }
-      return {
-        parcelTotal: orderedSum + excessSum,
-        matrixOrderedTotal: orderedSum,
-        matrixExtraTotal: excessSum,
-      }
+    if (effectiveView !== 'matrix') {
+      const listTotal = entries
+        .filter((e) => !e.skipped)
+        .reduce((s, e) => s + (parseFloat(e.quantity_dispatched) || 0), 0)
+      return { parcelTotal: listTotal, matrixOrderedTotal: 0, matrixExtraTotal: 0 }
     }
-    const listTotal = entries
-      .filter((e) => !e.skipped)
-      .reduce((s, e) => s + (parseFloat(e.quantity_dispatched) || 0), 0)
-    return { parcelTotal: listTotal, matrixOrderedTotal: 0, matrixExtraTotal: 0 }
-  }, [effectiveView, matrixChanges, entries, availableByCell, openQtyByCell])
+    let orderedSum = 0
+    let excessSum = 0
+    for (const [key, qty] of Object.entries(dispatchState)) {
+      if (qty <= 0) continue
+      const avail = availableByCell.get(key) ?? 0
+      if (avail <= 0) continue
+      const openQty = openQtyByCell.get(key) ?? 0
+      orderedSum += Math.min(qty, openQty)
+      excessSum += Math.max(0, qty - openQty)
+    }
+    return { parcelTotal: orderedSum + excessSum, matrixOrderedTotal: orderedSum, matrixExtraTotal: excessSum }
+  }, [effectiveView, dispatchState, entries, availableByCell, openQtyByCell])
 
   const blockingStock = useMemo(() => {
     let cellCount = 0
     let excessQty = 0
-    for (const c of matrixChanges) {
-      if (c.quantity <= 0) continue
-      const key = `${c.design_id}|${c.colour_id}|${c.size_id}`
+    for (const [key, qty] of Object.entries(dispatchState)) {
+      if (qty <= 0) continue
       const avail = availableByCell.get(key) ?? 0
-      if (c.quantity <= avail) continue
+      if (qty <= avail) continue
       cellCount += 1
-      excessQty += c.quantity - avail
+      excessQty += qty - avail
     }
     return { cellCount, excessQty }
-  },
-    [matrixChanges, availableByCell],
-  )
+  }, [dispatchState, availableByCell])
 
   const fillerSummary = useMemo(() => {
     let cellCount = 0
     let extraSkuCellCount = 0
     let fillerQty = 0
-
-    for (const c of matrixChanges) {
-      if (c.quantity <= 0) continue
-      const key = `${c.design_id}|${c.colour_id}|${c.size_id}`
-      const openQty = openQtyByCell.get(key) ?? 0
-      const qty = Math.max(0, c.quantity - openQty)
+    for (const [key, qty] of Object.entries(dispatchState)) {
       if (qty <= 0) continue
+      const openQty = openQtyByCell.get(key) ?? 0
+      const excess = Math.max(0, qty - openQty)
+      if (excess <= 0) continue
       cellCount += 1
-      fillerQty += qty
+      fillerQty += excess
       if (openQty <= 0) extraSkuCellCount += 1
     }
-
     return { cellCount, extraSkuCellCount, fillerQty }
-  }, [matrixChanges, openQtyByCell])
+  }, [dispatchState, openQtyByCell])
 
   const parcelInRange = parcelTotal >= PARCEL_TARGET_MIN && parcelTotal <= PARCEL_TARGET_MAX
   const parcelColor = parcelTotal === 0 ? 'var(--text-secondary)' : parcelInRange ? 'var(--success)' : 'var(--warning)'
@@ -580,6 +698,8 @@ export function DispatchForm({
     borderBottom: `2px solid var(--border)`,
     whiteSpace: 'nowrap',
   }
+
+  // ── Render ────────────────────────────────────────────────────
 
   return (
     <form action={formAction} className="dispatch-new-form">
@@ -662,6 +782,8 @@ export function DispatchForm({
             activeFilters={activeFilters}
             onFilterChange={setActiveFilters}
           />
+
+          {/* Available stock reference panel */}
           <div className="dispatch-stock-reference">
             <button
               type="button"
@@ -693,6 +815,8 @@ export function DispatchForm({
             Green cells — ordered qty ready. Orange cells — filler or extra SKU added. Amber cells — partial dispatch. Red cells — cannot dispatch from ready stock.
             Quantities distribute FIFO across open order lines first.
           </p>
+
+          {/* Add line panel */}
           <div className="dispatch-add-line">
             <div className="dispatch-add-line-fields">
               <label>
@@ -729,6 +853,28 @@ export function DispatchForm({
                 </select>
               </label>
               <label>
+                <span>Dabbi Colour</span>
+                <select
+                  value={addLine.dabbiColourId}
+                  onChange={(e) => setAddLine((prev) => ({ ...prev, dabbiColourId: e.target.value }))}
+                >
+                  {dabbiMaster.map((d) => (
+                    <option key={d.id} value={d.id}>{d.code}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Brand</span>
+                <select
+                  value={addLine.brandId}
+                  onChange={(e) => setAddLine((prev) => ({ ...prev, brandId: e.target.value }))}
+                >
+                  {brandMaster.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name || b.code}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
                 <span>Qty</span>
                 <input
                   type="number"
@@ -744,17 +890,35 @@ export function DispatchForm({
               Add line
             </button>
           </div>
-          <div className="dispatch-matrix-wrap dispatch-matrix-edit-wrap">
-            {dispatchMatrixFilteredData && (
-              <MatrixGrid
-                data={dispatchMatrixFilteredData}
-                mode="edit"
-                onCellChange={handleDispatchCellChange}
-                highlightCell={highlightDispatchCell}
-                compactMobile
-              />
-            )}
-          </div>
+
+          {/* Per-dabbi-section matrices */}
+          {sections.map((section) => {
+            const sectionData = buildSectionMatrixData(
+              dispatchState, section, openLines, sizeMaster, designMaster, colourMaster,
+            )
+            const filteredData = filterMatrixData(sectionData, activeFilters, { design: 'design', colour: 'colour' })
+            const sectionTitle = section.brand_label
+              ? `${section.dabbi_colour_code} / ${section.brand_label}`
+              : section.dabbi_colour_code
+
+            return (
+              <div key={section.dabbi_colour_id} className="dispatch-dabbi-section">
+                {sections.length > 1 && (
+                  <div className="dispatch-section-header">{sectionTitle}</div>
+                )}
+                <div className="dispatch-matrix-wrap dispatch-matrix-edit-wrap">
+                  <MatrixGrid
+                    data={filteredData}
+                    mode="edit"
+                    onCellChange={(change) => handleDispatchCellChange(change, section.dabbi_colour_id)}
+                    highlightCell={highlightDispatchCell}
+                    compactMobile
+                  />
+                </div>
+              </div>
+            )
+          })}
+
           {fillerSummary.fillerQty > 0 && (
             <p className="dispatch-message dispatch-message-extra">
               Extra fillers added: {fmt(fillerSummary.fillerQty)} gross across {fillerSummary.cellCount}{' '}
