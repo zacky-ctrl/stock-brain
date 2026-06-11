@@ -264,11 +264,11 @@ export function MatrixGrid({
 
   // ── styles ────────────────────────────────────────────────
 
-  const designColumnWidth = compactMobile ? 78 : 100
-  const clrColumnWidth = compactMobile ? 40 : 48
-  const sizeColumnWidth = compactMobile ? 44 : 52
+  const designColumnWidth = compactMobile ? 58 : 100
+  const clrColumnWidth = compactMobile ? 34 : 48
+  const sizeColumnWidth = compactMobile ? 38 : 52
   const totalColumnWidth = sizeColumnWidth
-  const cellHeight = compactMobile ? 34 : 40
+  const cellHeight = compactMobile ? 32 : 40
 
   // Fixed table width prevents browser auto-layout from sizing header and body
   // columns differently on mobile (particularly with rowSpan cells in Design column).
@@ -290,11 +290,11 @@ export function MatrixGrid({
     background: 'var(--bg-elevated)',
     color: 'var(--accent-bright)',
     fontWeight: 700,
-    padding: compactMobile ? '0.35rem 0.3rem' : '0.6rem 0.5rem',
+    padding: compactMobile ? '0.25rem 0.2rem' : '0.6rem 0.5rem',
     border: '1px solid var(--border)',
     textAlign: 'center',
     whiteSpace: 'nowrap',
-    fontSize: compactMobile ? '0.7rem' : 'var(--text-xs)',
+    fontSize: compactMobile ? '0.68rem' : 'var(--text-xs)',
     letterSpacing: '0.05em',
     textTransform: 'uppercase',
     borderBottom: '2px solid var(--accent)',
@@ -327,12 +327,12 @@ export function MatrixGrid({
   }
 
   const designCellStyleBase: CSSProperties = {
-    padding: '0.4rem 0.6rem',
+    padding: compactMobile ? '0.3rem 0.25rem' : '0.4rem 0.6rem',
     border: '1px solid var(--border)',
     borderRight: '2px solid var(--border-strong)',
     fontWeight: 700,
     verticalAlign: 'top',
-    whiteSpace: 'nowrap',
+    whiteSpace: compactMobile ? 'normal' : 'nowrap',
     color: 'var(--text-primary)',
     minWidth: `${designColumnWidth}px`,
     fontSize: compactMobile ? 'var(--text-xs)' : 'var(--text-sm)',
@@ -342,14 +342,14 @@ export function MatrixGrid({
   }
 
   const clrCellStyleBase: CSSProperties = {
-    padding: compactMobile ? '0.3rem 0.25rem' : '0.4rem 0.5rem',
+    padding: compactMobile ? '0.25rem 0.2rem' : '0.4rem 0.5rem',
     border: '1px solid var(--border)',
     borderRight: '1px solid var(--border-strong)',
     textAlign: 'center',
     fontWeight: 600,
     color: 'var(--text-secondary)',
     whiteSpace: 'nowrap',
-    fontSize: 'var(--text-xs)',
+    fontSize: compactMobile ? '0.68rem' : 'var(--text-xs)',
     minWidth: `${clrColumnWidth}px`,
     position: 'sticky',
     left: designColumnWidth,
@@ -420,7 +420,7 @@ export function MatrixGrid({
     <>
     <div
       className={`matrix-print-root${compactMobile ? ' matrix-grid-compact-mobile' : ''}`}
-      style={{ position: 'relative', overflowX: 'auto', overflowY: 'auto', maxHeight: '70vh' }}
+      style={{ position: 'relative', overflowX: 'auto', overflowY: 'auto', maxHeight: compactMobile ? '62vh' : '70vh' }}
     >
 
       {/* Draft banner */}
@@ -450,7 +450,7 @@ export function MatrixGrid({
       )}
 
       {/* Print header */}
-      {(printTitle || data.context_label || data.date_label) && (
+      {!compactMobile && (printTitle || data.context_label || data.date_label) && (
         <div style={{ marginBottom: '0.75rem' }}>
           {printTitle && <div className="matrix-print-title" style={{ fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--text-primary)' }}>{printTitle}</div>}
           {data.context_label && <div className="matrix-print-label" style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>{data.context_label}</div>}
@@ -458,7 +458,7 @@ export function MatrixGrid({
         </div>
       )}
 
-      <table style={tableStyle}>
+      <table className="matrix-grid-table" style={tableStyle}>
         <colgroup>
           <col style={{ width: `${designColumnWidth}px` }} />
           <col style={{ width: `${clrColumnWidth}px` }} />
@@ -501,7 +501,11 @@ export function MatrixGrid({
 
             return (
               <tr key={rowKey} style={{ background: rowBg }}>
-                {isFirstInDesign && (
+                {compactMobile ? (
+                  <td style={{ ...designCellStyleBase, background: rowBg }}>
+                    {isFirstInDesign ? row.design_name : ''}
+                  </td>
+                ) : isFirstInDesign && (
                   <td rowSpan={span} style={{ ...designCellStyleBase, background: rowBg }}>
                     {row.design_name}
                   </td>

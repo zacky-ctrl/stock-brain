@@ -347,6 +347,7 @@ export function PlanningAllocationMatrixPanel({
                 <MatrixGrid
                   data={matrix}
                   mode="view"
+                  compactMobile
                   highlightCell={highlightCell}
                   cellTextColor={cellTextColor}
                   printTitle={`${printTitle} — ${metric.charAt(0).toUpperCase() + metric.slice(1)} — ${dabbiLabel}`}
