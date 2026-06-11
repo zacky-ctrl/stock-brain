@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { PrintButton } from '@/components/ui/PrintButton'
@@ -13,7 +13,7 @@ import type { SizeMasterRow, DesignMasterRow, ColourMasterRow } from '@stock-bra
 // ── filter helpers ─────────────────────────────────────────────
 
 type FilterState = {
-  customer: string
+  customerIds: string[]
   design: string
   clr: string
   dabbi: string
@@ -23,7 +23,7 @@ type FilterState = {
 }
 
 const DEFAULT_FILTERS: FilterState = {
-  customer: '',
+  customerIds: [],
   design: '',
   clr: '',
   dabbi: '',
@@ -32,12 +32,15 @@ const DEFAULT_FILTERS: FilterState = {
   dateTo: '',
 }
 
-function isFilterActive(f: FilterState): boolean {
-  return Object.values(f).some((v) => v !== '')
-}
-
 function countActiveFilters(f: FilterState): number {
-  return Object.values(f).filter((v) => v !== '').length
+  let n = f.customerIds.length > 0 ? 1 : 0
+  if (f.design) n++
+  if (f.clr) n++
+  if (f.dabbi) n++
+  if (f.status) n++
+  if (f.dateFrom) n++
+  if (f.dateTo) n++
+  return n
 }
 
 const STATUS_FILTER_MAP: Record<string, PlanningLineStatus[]> = {
@@ -49,7 +52,7 @@ const STATUS_FILTER_MAP: Record<string, PlanningLineStatus[]> = {
 
 function applyFilters(rows: PlanningRowEnriched[], f: FilterState): PlanningRowEnriched[] {
   return rows.filter((r) => {
-    if (f.customer && r.customer_id !== f.customer) return false
+    if (f.customerIds.length > 0 && !f.customerIds.includes(r.customer_id)) return false
     if (f.design && r.shape_design_id !== f.design) return false
     if (f.clr && r.bindi_colour_id !== f.clr) return false
     if (f.dabbi && r.dabbi_colour_id !== f.dabbi) return false
@@ -60,9 +63,120 @@ function applyFilters(rows: PlanningRowEnriched[], f: FilterState): PlanningRowE
   })
 }
 
-// ── filter bar ─────────────────────────────────────────────────
+// ── customer multi-select ─────────────────────────────────────
 
 type FilterOption = { id: string; label: string }
+
+type CustomerMultiSelectProps = {
+  selected: string[]
+  options: FilterOption[]
+  onChange: (ids: string[]) => void
+}
+
+function CustomerMultiSelect({ selected, options, onChange }: CustomerMultiSelectProps) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [open])
+
+  let label: string
+  if (selected.length === 0) {
+    label = 'All Customers'
+  } else if (selected.length === 1) {
+    label = options.find((o) => o.id === selected[0])?.label ?? '1 customer'
+  } else if (selected.length === 2) {
+    const first = options.find((o) => o.id === selected[0])?.label ?? '?'
+    label = `${first} + 1`
+  } else {
+    label = `${selected.length} customers`
+  }
+
+  const isActive = selected.length > 0
+
+  const triggerStyle: React.CSSProperties = {
+    fontSize: 'var(--text-xs)',
+    padding: '0.3rem 0.55rem',
+    border: `1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+    borderRadius: 'var(--radius-sm)',
+    background: 'var(--bg-elevated)',
+    color: isActive ? 'var(--accent)' : 'var(--text-primary)',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  }
+
+  const dropdownStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 'calc(100% + 4px)',
+    left: 0,
+    zIndex: 100,
+    background: 'var(--bg-elevated)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+    minWidth: '200px',
+    padding: '0.35rem 0',
+  }
+
+  const optionStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.45rem',
+    padding: '0.3rem 0.75rem',
+    cursor: 'pointer',
+    fontSize: 'var(--text-xs)',
+    color: 'var(--text-primary)',
+    userSelect: 'none',
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button type="button" onClick={() => setOpen((v) => !v)} style={triggerStyle}>
+        {label} ▾
+      </button>
+      {open && (
+        <div style={dropdownStyle}>
+          <label style={optionStyle}>
+            <input
+              type="checkbox"
+              checked={selected.length === 0}
+              onChange={() => onChange([])}
+              style={{ cursor: 'pointer', accentColor: 'var(--accent)' }}
+            />
+            All Customers
+          </label>
+          {options.length > 0 && (
+            <div style={{ borderTop: '1px solid var(--border)', margin: '0.25rem 0' }} />
+          )}
+          {options.map((opt) => (
+            <label key={opt.id} style={optionStyle}>
+              <input
+                type="checkbox"
+                checked={selected.includes(opt.id)}
+                onChange={() => {
+                  const next = selected.includes(opt.id)
+                    ? selected.filter((x) => x !== opt.id)
+                    : [...selected, opt.id]
+                  onChange(next)
+                }}
+                style={{ cursor: 'pointer', accentColor: 'var(--accent)' }}
+              />
+              {opt.label}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── filter bar ─────────────────────────────────────────────────
 
 type FilterBarProps = {
   filters: FilterState
@@ -87,7 +201,7 @@ function FilterBar({ filters, onChange, customers, designs, colours, dabbis, act
     cursor: 'pointer',
   }
 
-  function field(key: keyof FilterState, label: string, options: FilterOption[]) {
+  function field(key: keyof Omit<FilterState, 'customerIds' | 'status'>, label: string, options: FilterOption[]) {
     return (
       <select
         value={filters[key]}
@@ -102,7 +216,11 @@ function FilterBar({ filters, onChange, customers, designs, colours, dabbis, act
 
   return (
     <div className="no-print" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
-      {field('customer', 'Customer', customers)}
+      <CustomerMultiSelect
+        selected={filters.customerIds}
+        options={customers}
+        onChange={(ids) => onChange({ ...filters, customerIds: ids })}
+      />
       {field('design', 'Design', designs)}
       {field('clr', 'CLR', colours)}
       {field('dabbi', 'Dabbi', dabbis)}
@@ -177,6 +295,44 @@ function FilterBar({ filters, onChange, customers, designs, colours, dabbis, act
       )}
     </div>
   )
+}
+
+// ── print filter summary helpers ───────────────────────────────
+
+const TOP_STATUS_PRINT_LABELS: Record<string, string> = {
+  ready:  'Ready to Dispatch',
+  labour: 'Give to Labour',
+  cut:    'Cut / Procure',
+  wip:    'Covered by WIP',
+}
+
+function buildPrintFilterSummary(
+  filters: FilterState,
+  customerOptions: FilterOption[],
+  designOptions: FilterOption[],
+  colourOptions: FilterOption[],
+  dabbiOptions: FilterOption[],
+): string {
+  const parts: string[] = []
+
+  if (filters.customerIds.length > 0) {
+    const MAX_SHOWN = 4
+    const names = filters.customerIds.map((id) => customerOptions.find((c) => c.id === id)?.label ?? id)
+    if (names.length <= MAX_SHOWN) {
+      parts.push(`Customers: ${names.join(', ')}`)
+    } else {
+      parts.push(`Customers: ${names.slice(0, MAX_SHOWN).join(', ')} + ${names.length - MAX_SHOWN} more`)
+    }
+  }
+
+  if (filters.design) parts.push(`Design: ${designOptions.find((d) => d.id === filters.design)?.label ?? filters.design}`)
+  if (filters.clr) parts.push(`CLR: ${colourOptions.find((c) => c.id === filters.clr)?.label ?? filters.clr}`)
+  if (filters.dabbi) parts.push(`Dabbi: ${dabbiOptions.find((d) => d.id === filters.dabbi)?.label ?? filters.dabbi}`)
+  if (filters.status) parts.push(`Status: ${TOP_STATUS_PRINT_LABELS[filters.status] ?? filters.status}`)
+  if (filters.dateFrom) parts.push(`From: ${filters.dateFrom}`)
+  if (filters.dateTo) parts.push(`To: ${filters.dateTo}`)
+
+  return parts.length > 0 ? parts.join(' | ') : 'No active filters'
 }
 
 // ── props ──────────────────────────────────────────────────────
@@ -267,18 +423,16 @@ export function PlanningViewToggle({
   const filteredRows = useMemo(() => applyFilters(rows, filters), [rows, filters])
   const activeFilterCount = countActiveFilters(filters)
 
-  const printFilterSummary = useMemo(() => {
-    const STATUS_MAP: Record<string, string> = { ready: 'Ready', labour: 'Labour', cut: 'Cut', wip: 'WIP' }
-    const parts: string[] = []
-    if (filters.customer) parts.push(`Customer: ${customerOptions.find(c => c.id === filters.customer)?.label ?? filters.customer}`)
-    if (filters.design) parts.push(`Design: ${designOptions.find(d => d.id === filters.design)?.label ?? filters.design}`)
-    if (filters.clr) parts.push(`CLR: ${colourOptions.find(c => c.id === filters.clr)?.label ?? filters.clr}`)
-    if (filters.dabbi) parts.push(`Dabbi: ${dabbiOptions.find(d => d.id === filters.dabbi)?.label ?? filters.dabbi}`)
-    if (filters.status) parts.push(`Status: ${STATUS_MAP[filters.status] ?? filters.status}`)
-    if (filters.dateFrom) parts.push(`From: ${filters.dateFrom}`)
-    if (filters.dateTo) parts.push(`To: ${filters.dateTo}`)
-    return parts.length > 0 ? parts.join(' | ') : 'No active filters'
-  }, [filters, customerOptions, designOptions, colourOptions, dabbiOptions])
+  const printFilterSummary = useMemo(
+    () => buildPrintFilterSummary(filters, customerOptions, designOptions, colourOptions, dabbiOptions),
+    [filters, customerOptions, designOptions, colourOptions, dabbiOptions],
+  )
+
+  // Dabbi label map for the matrix panel
+  const dabbiLabels = useMemo(
+    () => Object.fromEntries(dabbis.map((d) => [d.id, d.code])),
+    [dabbis],
+  )
 
   const sortLabel = SORT_LABELS[initialSort] ?? initialSort
   const printDate = new Date().toLocaleString('en-IN', {
@@ -366,7 +520,10 @@ export function PlanningViewToggle({
         <div style={{ fontSize: '18px', fontWeight: 'bold' }}>NIRANKARI BINDI</div>
         <div style={{ fontSize: '14px', fontWeight: 'bold', textDecoration: 'underline', marginTop: '2px' }}>Planning Report</div>
         <div style={{ fontSize: '11px', marginTop: '4px' }}>
-          {printFilterSummary} | Sort: {sortLabel} | Generated: {printDate}
+          {printFilterSummary}
+        </div>
+        <div style={{ fontSize: '10px', color: '#555', marginTop: '2px' }}>
+          Sort: {sortLabel} | Generated: {printDate}
         </div>
         <hr style={{ margin: '8px 0 0' }} />
       </div>
@@ -426,6 +583,7 @@ export function PlanningViewToggle({
           designMaster={designMaster}
           colourMaster={colourMaster}
           printTitle={printTitle}
+          dabbiLabels={dabbiLabels}
           matrixOnly
         >
           <></>
