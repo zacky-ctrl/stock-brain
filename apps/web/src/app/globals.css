@@ -1294,7 +1294,7 @@ a {
     font-size: var(--text-xs);
   }
 
-  .app-main > main table:not(.stock-table) {
+  .app-main > main table:not(.stock-table):not(.matrix-grid-table) {
     display: block;
     width: 100% !important;
     max-width: 100%;
@@ -1302,8 +1302,8 @@ a {
     -webkit-overflow-scrolling: touch;
   }
 
-  .app-main > main table:not(.stock-table) thead,
-  .app-main > main table:not(.stock-table) tbody {
+  .app-main > main table:not(.stock-table):not(.matrix-grid-table) thead,
+  .app-main > main table:not(.stock-table):not(.matrix-grid-table) tbody {
     display: table;
     min-width: 100%;
   }
@@ -1745,33 +1745,41 @@ a {
   }
 
   .matrix-grid-compact-mobile {
-    max-height: 58vh !important;
+    max-height: 62vh !important;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
   }
 
   .matrix-grid-compact-mobile table {
     font-size: var(--text-xs) !important;
+    width: auto !important;
   }
 
   .matrix-grid-compact-mobile th,
   .matrix-grid-compact-mobile td {
-    min-width: 44px !important;
-    height: 34px !important;
-    padding: 0.3rem 0.35rem !important;
-    font-size: 0.72rem !important;
+    min-width: 38px !important;
+    height: 32px !important;
+    padding: 0.22rem 0.2rem !important;
+    font-size: 0.68rem !important;
+    line-height: 1.05 !important;
   }
 
   .matrix-grid-compact-mobile th:first-child,
   .matrix-grid-compact-mobile td:first-child {
-    min-width: 78px !important;
-    max-width: 78px;
+    min-width: 58px !important;
+    max-width: 58px;
     white-space: normal !important;
+  }
+
+  .matrix-grid-compact-mobile th:nth-child(2),
+  .matrix-grid-compact-mobile td:nth-child(2) {
+    min-width: 34px !important;
+    max-width: 34px;
   }
 
   .matrix-grid-compact-mobile input {
     font-size: var(--text-sm) !important;
-    min-height: 34px;
+    min-height: 32px;
   }
 }
 
@@ -2282,6 +2290,45 @@ a {
 
 .print-landscape {
   page: landscape;
+}
+
+/* ── Skeleton loading ────────────────────────────────────────── */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-elevated) 25%,
+    var(--bg-hover) 50%,
+    var(--bg-elevated) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Navigation pending state ────────────────────────────────── */
+
+.nav-item-pending {
+  opacity: 0.7;
+}
+
+.nav-item-pending-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-bright);
+  animation: nav-pulse 0.8s ease-in-out infinite alternate;
+  flex-shrink: 0;
+}
+
+@keyframes nav-pulse {
+  0%   { opacity: 0.4; transform: scale(0.8); }
+  100% { opacity: 1;   transform: scale(1.15); }
 }
 
 @media print {

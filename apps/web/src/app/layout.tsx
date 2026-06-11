@@ -3,6 +3,7 @@ import './globals.css'
 import { AppShell } from '@/components/layout/AppShell'
 import { SidebarNavServer } from '@/components/layout/SidebarNavServer'
 import { ThemeProvider } from '@/components/ui/ThemeProvider'
+import { NavigationProgress } from '@/components/layout/NavigationProgress'
 
 export const metadata: Metadata = {
   title: 'Stock Brain',
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <ThemeProvider>
+          <NavigationProgress />
           <AppShell sidebar={<SidebarNavServer />}>
             {children}
           </AppShell>

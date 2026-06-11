@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import type { LucideIcon } from 'lucide-react'
@@ -215,7 +215,15 @@ export function SidebarNav({ role }: Props) {
     ACCOUNTING: false,
     SETTINGS: false,
   }))
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
   const pathname = usePathname()
+
+  // Clear pending state and drawer when navigation completes
+  useEffect(() => {
+    setPendingHref(null)
+    setDrawerOpen(false)
+  }, [pathname])
+
   const visibleSections = getVisibleSections(role)
   const visibleItems = visibleSections.flatMap((section) => section.items)
   const visibleHrefs = new Set(visibleItems.map((item) => item.href))
@@ -309,13 +317,15 @@ export function SidebarNav({ role }: Props) {
               {!isExpanded && <div style={{ height: '0.5rem' }} />}
               {(!isExpanded || openSections[section.label]) && section.items.map((item) => {
                 const active = isActive(item.href)
+                const pending = pendingHref === item.href
                 const Icon = item.icon
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     title={!isExpanded ? item.label : undefined}
-                    className={`nav-item${active ? ' nav-item-active' : ''}`}
+                    className={`nav-item${active ? ' nav-item-active' : ''}${pending ? ' nav-item-pending' : ''}`}
+                    onClick={() => { if (!active && !pending) setPendingHref(item.href) }}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -324,13 +334,21 @@ export function SidebarNav({ role }: Props) {
                       margin: '1px 0.5rem',
                       justifyContent: !isExpanded ? 'center' : 'flex-start',
                       fontSize: 'var(--text-sm)',
-                      color: active ? undefined : 'var(--text-secondary)',
-                      fontWeight: active ? 600 : 500,
+                      color: active ? undefined : pending ? 'var(--accent-bright)' : 'var(--text-secondary)',
+                      fontWeight: active || pending ? 600 : 500,
                       borderRadius: 'var(--radius-sm)',
                     }}
                   >
                     <Icon size={18} style={{ flexShrink: 0 }} />
-                    {isExpanded && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden' }}>{item.label}</span>}
+                    {isExpanded && (
+                      <>
+                        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', flex: 1 }}>{item.label}</span>
+                        {pending && <span className="nav-item-pending-dot" />}
+                      </>
+                    )}
+                    {!isExpanded && pending && (
+                      <span className="nav-item-pending-dot" style={{ position: 'absolute', top: 4, right: 4 }} />
+                    )}
                   </Link>
                 )
               })}
@@ -416,11 +434,13 @@ export function SidebarNav({ role }: Props) {
         <div style={{ display: 'flex', flex: 1, gap: '0.25rem', overflowX: 'auto' }}>
           {visibleItems.slice(0, 7).map((item) => {
             const active = isActive(item.href)
+            const pending = pendingHref === item.href
             const Icon = item.icon
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => { if (!active && !pending) setPendingHref(item.href) }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -428,15 +448,17 @@ export function SidebarNav({ role }: Props) {
                   padding: '0.3rem 0.6rem',
                   borderRadius: 'var(--radius-sm)',
                   fontSize: 'var(--text-xs)',
-                  color: active ? 'var(--accent)' : 'var(--text-secondary)',
-                  background: active ? 'var(--accent-subtle)' : 'transparent',
-                  fontWeight: active ? 600 : 400,
+                  color: active ? 'var(--accent)' : pending ? 'var(--accent-bright)' : 'var(--text-secondary)',
+                  background: active ? 'var(--accent-subtle)' : pending ? 'rgba(165, 148, 249, 0.08)' : 'transparent',
+                  fontWeight: active || pending ? 600 : 400,
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
+                  opacity: pending ? 0.8 : 1,
                 }}
               >
                 <Icon size={13} />
                 {item.label}
+                {pending && <span className="nav-item-pending-dot" style={{ marginLeft: '2px' }} />}
               </Link>
             )
           })}
@@ -447,11 +469,13 @@ export function SidebarNav({ role }: Props) {
       <nav className="app-bottomtabs">
         {mobileTabs.map((item) => {
           const active = isActive(item.href)
+          const pending = pendingHref === item.href
           const Icon = item.icon
           return (
             <Link
               key={item.href}
               href={item.href}
+              onClick={() => { if (!active && !pending) setPendingHref(item.href) }}
               style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -459,13 +483,27 @@ export function SidebarNav({ role }: Props) {
                 gap: '0.2rem',
                 padding: '0.3rem 0.5rem',
                 flex: 1,
-                color: active ? 'var(--accent)' : 'var(--text-muted)',
+                color: active ? 'var(--accent)' : pending ? 'var(--accent-bright)' : 'var(--text-muted)',
                 fontSize: '0.65rem',
-                fontWeight: active ? 600 : 400,
+                fontWeight: active || pending ? 600 : 400,
+                position: 'relative',
               }}
             >
               <Icon size={20} />
               {item.label}
+              {pending && (
+                <span style={{
+                  position: 'absolute',
+                  top: 4,
+                  right: '50%',
+                  transform: 'translateX(10px)',
+                  width: 5,
+                  height: 5,
+                  borderRadius: '50%',
+                  background: 'var(--accent-bright)',
+                  animation: 'nav-pulse 0.8s ease-in-out infinite alternate',
+                }} />
+              )}
             </Link>
           )
         })}
@@ -519,12 +557,16 @@ export function SidebarNav({ role }: Props) {
                 </div>
                 {section.items.map((item) => {
                   const active = isActive(item.href)
+                  const pending = pendingHref === item.href
                   const Icon = item.icon
                   return (
                     <Link
                       key={item.href}
                       href={item.href}
-                      onClick={() => setDrawerOpen(false)}
+                      onClick={() => {
+                        if (!active && !pending) setPendingHref(item.href)
+                        setDrawerOpen(false)
+                      }}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -532,13 +574,14 @@ export function SidebarNav({ role }: Props) {
                         padding: '0.6rem 0.5rem',
                         borderRadius: 'var(--radius-sm)',
                         fontSize: 'var(--text-base)',
-                        color: active ? 'var(--accent)' : 'var(--text-primary)',
-                        background: active ? 'var(--accent-subtle)' : 'transparent',
-                        fontWeight: active ? 600 : 400,
+                        color: active ? 'var(--accent)' : pending ? 'var(--accent-bright)' : 'var(--text-primary)',
+                        background: active ? 'var(--accent-subtle)' : pending ? 'rgba(165,148,249,0.08)' : 'transparent',
+                        fontWeight: active || pending ? 600 : 400,
                       }}
                     >
                       <Icon size={17} />
-                      {item.label}
+                      <span style={{ flex: 1 }}>{item.label}</span>
+                      {pending && <span className="nav-item-pending-dot" />}
                     </Link>
                   )
                 })}
