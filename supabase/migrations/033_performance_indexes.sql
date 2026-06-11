@@ -2,12 +2,11 @@
 --
 -- Every planning fetch runs:
 --   SELECT id FROM dispatch_events WHERE status = 'confirmed'
---   SELECT * FROM dispatch_events WHERE order_id IN (...)
 --   SELECT ... FROM dispatch_lines WHERE dispatch_event_id IN (...)
 --   SELECT id FROM labour_jobs WHERE status NOT IN (...)
 --   SELECT ... FROM labour_job_lines WHERE labour_job_id IN (...)
 --
--- None of those filter columns had an index. These five indexes address
+-- None of those filter columns had an index. These indexes address
 -- the most frequently executed and largest scans in the planning + orders
 -- code paths. All are CREATE INDEX IF NOT EXISTS so they are safe to run
 -- against a live database.
@@ -18,12 +17,6 @@
 CREATE INDEX IF NOT EXISTS idx_dispatch_events_status
   ON dispatch_events (status);
 
--- dispatch_events(order_id)
--- Orders page fetches all events per order to build dispatch portfolio.
--- Existing index only covers (customer_id, dispatch_date), not order_id.
-CREATE INDEX IF NOT EXISTS idx_dispatch_events_order_id
-  ON dispatch_events (order_id);
-
 -- dispatch_lines(dispatch_event_id)
 -- After fetching confirmed event IDs, every fetch joins back to lines
 -- with .in('dispatch_event_id', confirmedIds). Only order_line_id was indexed.
@@ -31,7 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_dispatch_lines_dispatch_event_id
   ON dispatch_lines (dispatch_event_id);
 
 -- labour_jobs(status)
--- Planning fetcher selects active job IDs with NOT IN ('returned_complete', 'cancelled_recalled').
+-- Planning fetcher selects active job IDs with NOT IN status filter.
 -- Partial index keeps it small — only active/open jobs are indexed.
 CREATE INDEX IF NOT EXISTS idx_labour_jobs_status_active
   ON labour_jobs (status)
