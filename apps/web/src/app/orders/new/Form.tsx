@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState, useCallback, useTransition } from 'react'
+import { useActionState, useState, useCallback, useTransition, useEffect } from 'react'
 import { createOrder, quickAddCustomer } from './actions'
 import type { QuickCustomerState } from './actions'
 import type { ActionState } from '@/lib/masters'
@@ -51,6 +51,24 @@ const emptyLine = (dabbiColourId = ''): LineState => ({
   dabbi_colour_id: dabbiColourId,
   ordered_qty: '',
 })
+
+// ── matrix block ──────────────────────────────────────────────
+//
+// One block = one dabbi colour + its independent set of cell changes.
+// The form state holds an array of these; saving merges them all.
+
+type MatrixBlock = {
+  id: string               // stable client-side ID used as React key + draft key
+  dabbiColourId: string
+  changes: MatrixChangeEvent[]
+}
+
+const BLOCK_CONFIG_KEY = 'orders-new-block-config'
+
+// Block 0 keeps the original draft key for backward compatibility.
+function blockDraftKey(blockId: string): string {
+  return blockId === 'block-0' ? 'orders-new' : `orders-new-${blockId}`
+}
 
 // ── styles ────────────────────────────────────────────────────
 
@@ -144,9 +162,35 @@ export function CreateOrderForm({
   const [orderNotes, setOrderNotes] = useState('')
   const [lines, setLines] = useState<LineState[]>([emptyLine()])
   const [view, setView] = useState<'list' | 'matrix'>('list')
-  const [matrixDabbiId, setMatrixDabbiId] = useState<string>('')
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({})
-  const [matrixChanges, setMatrixChanges] = useState<MatrixChangeEvent[]>([])
+  const [matrixBlocks, setMatrixBlocks] = useState<MatrixBlock[]>([
+    { id: 'block-0', dabbiColourId: '', changes: [] },
+  ])
+
+  // Restore block config (dabbi colour selections + extra blocks) from localStorage after mount.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(BLOCK_CONFIG_KEY)
+      if (!raw) return
+      const saved = JSON.parse(raw) as { id: string; dabbiColourId: string }[]
+      if (!Array.isArray(saved) || saved.length === 0) return
+      setMatrixBlocks((prev) => {
+        const isDefault = prev.length === 1 && !prev[0].dabbiColourId && prev[0].changes.length === 0
+        if (!isDefault) return prev
+        return saved.map((s) => ({ id: s.id, dabbiColourId: s.dabbiColourId, changes: [] }))
+      })
+    } catch { /* ignore */ }
+  }, [])
+
+  // Persist block config whenever it changes.
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        BLOCK_CONFIG_KEY,
+        JSON.stringify(matrixBlocks.map((b) => ({ id: b.id, dabbiColourId: b.dabbiColourId }))),
+      )
+    } catch { /* ignore */ }
+  }, [matrixBlocks])
 
   const selectedCustomerDefaultDabbi = customerOptions.find((customer) => customer.id === customerId)?.defaultDabbiColourId ?? ''
 
@@ -160,7 +204,11 @@ export function CreateOrderForm({
     const defaultDabbiColourId = customerOptions.find((customer) => customer.id === nextCustomerId)?.defaultDabbiColourId ?? ''
     setCustomerId(nextCustomerId)
     if (!defaultDabbiColourId) return
-    setMatrixDabbiId(defaultDabbiColourId)
+    // Set first matrix block's dabbi if not already set
+    setMatrixBlocks((prev) => prev.map((b, i) =>
+      i === 0 ? { ...b, dabbiColourId: b.dabbiColourId || defaultDabbiColourId } : b,
+    ))
+    // Set list mode lines
     setLines((prev) => prev.map((line) => ({
       ...line,
       dabbi_colour_id: line.dabbi_colour_id || defaultDabbiColourId,
@@ -196,18 +244,38 @@ export function CreateOrderForm({
     })
   }
 
-  const handleMatrixCellChange = useCallback((change: MatrixChangeEvent) => {
-    setMatrixChanges((prev) => {
-      const idx = prev.findIndex(
+  // ── matrix block handlers ─────────────────────────────────
+
+  const addMatrixBlock = () => {
+    setMatrixBlocks((prev) => [
+      ...prev,
+      { id: `block-${Date.now()}`, dabbiColourId: '', changes: [] },
+    ])
+  }
+
+  const removeMatrixBlock = (blockId: string) => {
+    setMatrixBlocks((prev) => prev.filter((b) => b.id !== blockId))
+    // Clear the draft for the removed block from localStorage
+    try { localStorage.removeItem(`matrix-draft-${blockDraftKey(blockId)}`) } catch { /* ignore */ }
+  }
+
+  const updateBlockDabbi = (blockId: string, dabbiColourId: string) => {
+    setMatrixBlocks((prev) => prev.map((b) => b.id === blockId ? { ...b, dabbiColourId } : b))
+  }
+
+  const handleBlockCellChange = useCallback((blockId: string, change: MatrixChangeEvent) => {
+    setMatrixBlocks((prev) => prev.map((b) => {
+      if (b.id !== blockId) return b
+      const idx = b.changes.findIndex(
         (c) => c.design_id === change.design_id && c.colour_id === change.colour_id && c.size_id === change.size_id,
       )
       if (idx >= 0) {
-        const next = [...prev]
+        const next = [...b.changes]
         next[idx] = change
-        return next
+        return { ...b, changes: next }
       }
-      return [...prev, change]
-    })
+      return { ...b, changes: [...b.changes, change] }
+    }))
   }, [])
 
   // Build full blank matrix (all designs × colours × sizes = zero) for entry
@@ -235,25 +303,22 @@ export function CreateOrderForm({
     ? filterMatrixData(fullMatrixData, activeFilters, { design: 'design', colour: 'colour' })
     : null
 
-  // In matrix mode, the lines payload is built from matrix cell changes
+  // Build lines payload from all matrix blocks.
+  // Returns null if any block has quantities but no dabbi colour selected.
   const buildMatrixLinesPayload = () => {
-    if (!matrixDabbiId) return null
-    const inserts = parseMatrixToOrderLines(
-      matrixChanges.filter((c) => c.quantity > 0),
-      matrixDabbiId,
-    )
-    return inserts.map((ins) => ({
-      shape_design_id: ins.shape_design_id,
-      bindi_colour_id: ins.bindi_colour_id,
-      size_id: ins.size_id,
-      dabbi_colour_id: ins.dabbi_colour_id,
-      ordered_qty: ins.ordered_qty,
-    }))
+    const allLines: { shape_design_id: string; bindi_colour_id: string; size_id: string; dabbi_colour_id: string; ordered_qty: number }[] = []
+    for (const block of matrixBlocks) {
+      const nonZeroChanges = block.changes.filter((c) => c.quantity > 0)
+      if (nonZeroChanges.length === 0) continue
+      if (!block.dabbiColourId) return null
+      allLines.push(...parseMatrixToOrderLines(nonZeroChanges, block.dabbiColourId))
+    }
+    return allLines
   }
 
   // Serialize lines to JSON for the hidden input.
   // In list mode: from the list state.
-  // In matrix mode: from the matrix cell changes.
+  // In matrix mode: from all matrix blocks.
   const linesPayload = view === 'matrix'
     ? JSON.stringify(buildMatrixLinesPayload() ?? [])
     : JSON.stringify(
@@ -264,6 +329,16 @@ export function CreateOrderForm({
       )
 
   const canShowMatrix = fullMatrixData !== null
+
+  // Matrix validation state (for hints before submit)
+  const hasBlocksWithQtyButNoDabbi = matrixBlocks.some(
+    (b) => b.changes.some((c) => c.quantity > 0) && !b.dabbiColourId,
+  )
+  const firstBlockHasNothingSelected = !matrixBlocks[0].dabbiColourId && !matrixBlocks[0].changes.some((c) => c.quantity > 0)
+
+  // Dabbi colours already used across all blocks (for per-block dropdown filtering)
+  const allUsedDabbiIds = new Set(matrixBlocks.map((b) => b.dabbiColourId).filter(Boolean))
+  const unusedDabbiColours = dabbiColours.filter((d) => !allUsedDabbiIds.has(d.id))
 
   return (
     <div>
@@ -483,31 +558,78 @@ export function CreateOrderForm({
               activeFilters={activeFilters}
               onFilterChange={setActiveFilters}
             />
-            <div style={{ ...fieldWrap, marginBottom: '0.75rem', maxWidth: '220px' }}>
-              <label style={{ fontSize: '0.82rem' }}>Dabbi Colour (applies to all cells)</label>
-              <select
-                value={matrixDabbiId}
-                onChange={(e) => setMatrixDabbiId(e.target.value)}
-                style={selectStyle}
-                required
-              >
-                <option value="">Select dabbi colour…</option>
-                {dabbiColours.map((d) => (
-                  <option key={d.id} value={d.id}>{d.label}</option>
-                ))}
-              </select>
-            </div>
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}>
-              Enter quantities in gross. Leave cells blank or zero to skip.
-            </p>
-            <div style={{ overflowX: 'auto' }}>
-              <MatrixGrid
-                data={emptyMatrixData!}
-                mode="edit"
-                onCellChange={handleMatrixCellChange}
-                draftKey="orders-new"
-              />
-            </div>
+
+            {matrixBlocks.map((block, blockIndex) => {
+              // Per-block dabbi options: exclude colours already taken by other blocks
+              const otherUsedDabbis = new Set(
+                matrixBlocks.filter((b) => b.id !== block.id).map((b) => b.dabbiColourId).filter(Boolean),
+              )
+              const blockDabbiOptions = dabbiColours.filter((d) => !otherUsedDabbis.has(d.id))
+
+              const blockLabel = block.dabbiColourId
+                ? `${dabbiColours.find((d) => d.id === block.dabbiColourId)?.label ?? 'Dabbi'} quantities`
+                : `Dabbi Colour Block ${blockIndex + 1}`
+
+              return (
+                <div
+                  key={block.id}
+                  style={{
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0.75rem',
+                    marginBottom: '1rem',
+                    background: 'var(--bg-elevated)',
+                  }}
+                >
+                  {/* Block header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 'var(--text-sm)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      {blockLabel}
+                    </span>
+                    {matrixBlocks.length > 1 && blockIndex > 0 && (
+                      <button type="button" onClick={() => removeMatrixBlock(block.id)} style={removeBtn}>
+                        × Remove
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Dabbi colour selector */}
+                  <div style={{ ...fieldWrap, marginBottom: '0.75rem', maxWidth: '220px' }}>
+                    <label style={{ fontSize: '0.82rem' }}>Dabbi Colour</label>
+                    <select
+                      value={block.dabbiColourId}
+                      onChange={(e) => updateBlockDabbi(block.id, e.target.value)}
+                      style={selectStyle}
+                    >
+                      <option value="">Select dabbi colour…</option>
+                      {blockDabbiOptions.map((d) => (
+                        <option key={d.id} value={d.id}>{d.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}>
+                    Enter quantities in gross. Leave cells blank or zero to skip.
+                  </p>
+
+                  <div style={{ overflowX: 'auto' }}>
+                    <MatrixGrid
+                      data={emptyMatrixData!}
+                      mode="edit"
+                      onCellChange={(change) => handleBlockCellChange(block.id, change)}
+                      draftKey={blockDraftKey(block.id)}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Add dabbi colour block — hidden once all colours are taken */}
+            {unusedDabbiColours.length > 0 && (
+              <button type="button" onClick={addMatrixBlock} style={addLineBtn}>
+                + Add Dabbi Colour
+              </button>
+            )}
           </div>
         )}
 
@@ -611,8 +733,13 @@ export function CreateOrderForm({
           </button>
         )}
 
-        {/* Matrix mode validation hint */}
-        {view === 'matrix' && !matrixDabbiId && (
+        {/* Matrix mode validation hints */}
+        {view === 'matrix' && hasBlocksWithQtyButNoDabbi && (
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--danger)', margin: '0 0 0.75rem' }}>
+            Select a dabbi colour for every block that has quantities entered.
+          </p>
+        )}
+        {view === 'matrix' && !hasBlocksWithQtyButNoDabbi && firstBlockHasNothingSelected && matrixBlocks.length === 1 && (
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--danger)', margin: '0 0 0.75rem' }}>
             Select a dabbi colour above before submitting.
           </p>
