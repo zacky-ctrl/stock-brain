@@ -316,13 +316,8 @@ function buildPrintFilterSummary(
   const parts: string[] = []
 
   if (filters.customerIds.length > 0) {
-    const MAX_SHOWN = 4
     const names = filters.customerIds.map((id) => customerOptions.find((c) => c.id === id)?.label ?? id)
-    if (names.length <= MAX_SHOWN) {
-      parts.push(`Customers: ${names.join(', ')}`)
-    } else {
-      parts.push(`Customers: ${names.slice(0, MAX_SHOWN).join(', ')} + ${names.length - MAX_SHOWN} more`)
-    }
+    parts.push(`Customers: ${names.join(', ')}`)
   }
 
   if (filters.design) parts.push(`Design: ${designOptions.find((d) => d.id === filters.design)?.label ?? filters.design}`)
