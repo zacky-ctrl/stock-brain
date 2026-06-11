@@ -267,12 +267,23 @@ export function MatrixGrid({
   const designColumnWidth = compactMobile ? 78 : 100
   const clrColumnWidth = compactMobile ? 40 : 48
   const sizeColumnWidth = compactMobile ? 44 : 52
+  const totalColumnWidth = sizeColumnWidth
   const cellHeight = compactMobile ? 34 : 40
+
+  // Fixed table width prevents browser auto-layout from sizing header and body
+  // columns differently on mobile (particularly with rowSpan cells in Design column).
+  const tableMinWidth =
+    designColumnWidth +
+    clrColumnWidth +
+    data.sizes.length * sizeColumnWidth +
+    totalColumnWidth
 
   const tableStyle: CSSProperties = {
     borderCollapse: 'collapse',
     fontSize: compactMobile ? 'var(--text-xs)' : 'var(--text-sm)',
-    width: '100%',
+    tableLayout: 'fixed',
+    width: `${tableMinWidth}px`,
+    minWidth: `${tableMinWidth}px`,
   }
 
   const headerThStyle: CSSProperties = {
@@ -409,7 +420,7 @@ export function MatrixGrid({
     <>
     <div
       className={`matrix-print-root${compactMobile ? ' matrix-grid-compact-mobile' : ''}`}
-      style={{ position: 'relative', overflow: 'auto', maxHeight: '70vh' }}
+      style={{ position: 'relative', overflowX: 'auto', overflowY: 'auto', maxHeight: '70vh' }}
     >
 
       {/* Draft banner */}
@@ -448,6 +459,14 @@ export function MatrixGrid({
       )}
 
       <table style={tableStyle}>
+        <colgroup>
+          <col style={{ width: `${designColumnWidth}px` }} />
+          <col style={{ width: `${clrColumnWidth}px` }} />
+          {data.sizes.map((s) => (
+            <col key={s.size_id} style={{ width: `${sizeColumnWidth}px` }} />
+          ))}
+          <col style={{ width: `${totalColumnWidth}px` }} />
+        </colgroup>
         <thead>
           <tr className="matrix-header-row">
             <th style={designThStyle}>Design</th>
